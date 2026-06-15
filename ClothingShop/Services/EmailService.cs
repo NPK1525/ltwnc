@@ -4,23 +4,16 @@ using MimeKit;
 
 namespace ClothingShop.Services
 {
-    public class EmailService : IEmailService
+    public class EmailService(IConfiguration configuration) : IEmailService
     {
-        private readonly IConfiguration _configuration;
-
-        public EmailService(IConfiguration configuration)
-        {
-            _configuration = configuration;
-        }
-
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
-            var senderName = _configuration["EmailSettings:SenderName"] ?? "ClothingShop";
-            var senderEmail = _configuration["EmailSettings:SenderEmail"] ?? throw new InvalidOperationException("EmailSettings:SenderEmail is not configured");
-            var smtpServer = _configuration["EmailSettings:SmtpServer"] ?? throw new InvalidOperationException("EmailSettings:SmtpServer is not configured");
-            var smtpPort = int.Parse(_configuration["EmailSettings:Port"] ?? "587");
-            var username = _configuration["EmailSettings:Username"] ?? throw new InvalidOperationException("EmailSettings:Username is not configured");
-            var password = _configuration["EmailSettings:Password"] ?? throw new InvalidOperationException("EmailSettings:Password is not configured");
+            var senderName = configuration["EmailSettings:SenderName"] ?? "ClothingShop";
+            var senderEmail = configuration["EmailSettings:SenderEmail"] ?? throw new InvalidOperationException("EmailSettings:SenderEmail is not configured");
+            var smtpServer = configuration["EmailSettings:SmtpServer"] ?? throw new InvalidOperationException("EmailSettings:SmtpServer is not configured");
+            var smtpPort = int.Parse(configuration["EmailSettings:Port"] ?? "587");
+            var username = configuration["EmailSettings:Username"] ?? throw new InvalidOperationException("EmailSettings:Username is not configured");
+            var password = configuration["EmailSettings:Password"] ?? throw new InvalidOperationException("EmailSettings:Password is not configured");
 
             var email = new MimeMessage();
             email.From.Add(new MailboxAddress(senderName, senderEmail));
