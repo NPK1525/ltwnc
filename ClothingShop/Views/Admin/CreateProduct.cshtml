@@ -100,13 +100,9 @@
                                     <input class="form-check-input" type="checkbox" name="sizes" value="Freesize" id="sizeFreesize">
                                     <label class="form-check-label" for="sizeFreesize">Freesize</label>
                                 </div>
-                                <div class="form-check form-check-inline">
-                                    <input class="form-check-input" type="checkbox" name="sizes" value="Không có size" id="sizeNone">
-                                    <label class="form-check-label" for="sizeNone">Không có size</label>
-                                </div>
                             </div>
                             <input type="hidden" asp-for="Size" id="sizeHidden" required />
-                            <small class="text-muted">Chọn "Không có size" cho phụ kiện, nón, balo...</small>
+                            <small class="text-muted">Chọn size phù hợp cho sản phẩm (ví dụ: Freesize cho phụ kiện, nón, balo...)</small>
                         </div>
 
                         <!-- Màu sắc -->
@@ -247,17 +243,7 @@
             const sizeCheckboxes = document.querySelectorAll('input[name="sizes"]:checked');
             const sizes = Array.from(sizeCheckboxes).map(cb => cb.value);
             
-            // Kiểm tra nếu chọn "Không có size" thì bỏ chọn các size khác
-            const sizeNoneCheckbox = document.getElementById('sizeNone');
-            if (sizeNoneCheckbox && sizeNoneCheckbox.checked) {
-                // Bỏ check tất cả size khác
-                document.querySelectorAll('input[name="sizes"]').forEach(cb => {
-                    if (cb.id !== 'sizeNone') {
-                        cb.checked = false;
-                    }
-                });
-                document.getElementById('sizeHidden').value = JSON.stringify(["Không có size"]);
-            } else if (sizes.length > 0) {
+            if (sizes.length > 0) {
                 document.getElementById('sizeHidden').value = JSON.stringify(sizes);
             } else {
                 document.getElementById('sizeHidden').value = '';
@@ -278,52 +264,25 @@
             const allCheckboxes = document.querySelectorAll('input[name="sizes"], input[name="colors"]');
             allCheckboxes.forEach(cb => {
                 cb.addEventListener('change', function() {
-                    // Nếu click vào "Không có size", bỏ chọn tất cả size khác
-                    if (this.id === 'sizeNone' && this.checked) {
-                        document.querySelectorAll('input[name="sizes"]').forEach(checkbox => {
-                            if (checkbox.id !== 'sizeNone') {
-                                checkbox.checked = false;
-                            }
-                        });
-                    }
-                    // Nếu click vào size khác, bỏ chọn "Không có size"
-                    else if (this.name === 'sizes' && this.id !== 'sizeNone' && this.checked) {
-                        const sizeNone = document.getElementById('sizeNone');
-                        if (sizeNone) {
-                            sizeNone.checked = false;
-                        }
-                    }
                     updateHiddenFields();
                 });
             });
 
-            // Tự động check "Không có size" khi chọn danh mục phụ kiện
+            // Tự động check "Freesize" khi chọn danh mục phụ kiện
             const categorySelect = document.querySelector('select[name="Category"]');
-            const sizeNoneCheckbox = document.getElementById('sizeNone');
+            const sizeFreesizeCheckbox = document.getElementById('sizeFreesize');
             const noSizeCategories = ['Phụ kiện', 'Nón', 'Balo', 'Túi xách', 'Ví', 'Thắt lưng', 'Mắt kính'];
 
-            if (categorySelect && sizeNoneCheckbox) {
+            if (categorySelect && sizeFreesizeCheckbox) {
                 categorySelect.addEventListener('change', function() {
                     const category = this.value;
                     if (noSizeCategories.some(cat => category.includes(cat))) {
                         // Bỏ check tất cả size khác
                         document.querySelectorAll('input[name="sizes"]').forEach(cb => {
-                            if (cb.id !== 'sizeNone') cb.checked = false;
+                            if (cb.id !== 'sizeFreesize') cb.checked = false;
                         });
-                        // Check "Không có size"
-                        sizeNoneCheckbox.checked = true;
-                        updateHiddenFields();
-                    }
-                });
-            }
-
-            // Khi check "Không có size", bỏ check các size khác
-            if (sizeNoneCheckbox) {
-                sizeNoneCheckbox.addEventListener('change', function() {
-                    if (this.checked) {
-                        document.querySelectorAll('input[name="sizes"]').forEach(cb => {
-                            if (cb.id !== 'sizeNone') cb.checked = false;
-                        });
+                        // Check "Freesize"
+                        sizeFreesizeCheckbox.checked = true;
                         updateHiddenFields();
                     }
                 });

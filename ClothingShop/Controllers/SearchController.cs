@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using ClothingShop.Data;
 using ClothingShop.Models;
+using ClothingShop.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace ClothingShop.Controllers
@@ -21,7 +22,7 @@ namespace ClothingShop.Controllers
 
             // Lấy tất cả sản phẩm có sẵn
             var allProducts = await _context.Products
-                .Where(p => p.Quantity > 0)
+                .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                 .Select(p => new
                 {
                     p.Id,
@@ -34,46 +35,46 @@ namespace ClothingShop.Controllers
                 .ToListAsync();
 
             var searchQuery = q.ToLower().Trim();
-            
+
             // Tìm kiếm theo 3 cách:
             // 1. Tên chứa từ khóa (ưu tiên cao)
             // 2. Có từ bắt đầu bằng từ khóa
             // 3. Chữ cái đầu của các từ ghép lại khớp với từ khóa (acronym)
             var products = allProducts
-                .Where(p => 
+                .Where(p =>
                 {
                     var nameLower = p.Name.ToLower();
-                    
+
                     // Tìm kiếm thông thường - tên chứa từ khóa
                     if (nameLower.Contains(searchQuery))
                         return true;
-                    
+
                     // Tìm kiếm theo từ bắt đầu bằng chữ cái
                     var words = p.Name.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
                     if (words.Any(w => w.StartsWith(searchQuery, StringComparison.OrdinalIgnoreCase)))
                         return true;
-                    
+
                     // Tìm kiếm theo acronym (chữ cái đầu của mỗi từ)
                     var acronym = string.Join("", words.Select(w => w[0])).ToLower();
                     return acronym.Contains(searchQuery);
                 })
-                .OrderByDescending(p => 
+                .OrderByDescending(p =>
                 {
                     var nameLower = p.Name.ToLower();
                     var words = p.Name.Split(Separators, StringSplitOptions.RemoveEmptyEntries);
-                    
+
                     // Ưu tiên 1: Tên bắt đầu bằng từ khóa
                     if (nameLower.StartsWith(searchQuery, StringComparison.Ordinal))
                         return 4;
-                    
+
                     // Ưu tiên 2: Có từ bắt đầu bằng từ khóa
                     if (words.Any(w => w.StartsWith(searchQuery, StringComparison.OrdinalIgnoreCase)))
                         return 3;
-                    
+
                     // Ưu tiên 3: Tên chứa từ khóa
                     if (nameLower.Contains(searchQuery))
                         return 2;
-                    
+
                     // Ưu tiên 4: Chỉ khớp acronym
                     return 1;
                 })
@@ -96,12 +97,12 @@ namespace ClothingShop.Controllers
             int page = 1,
             int pageSize = 20)
         {
-            var query = _context.Products.Where(p => p.Quantity > 0).AsQueryable();
+            var query = _context.Products.Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0)).AsQueryable();
 
             // Tìm kiếm theo từ khóa
             if (!string.IsNullOrWhiteSpace(q))
             {
-                query = query.Where(p => p.Name.Contains(q) || 
+                query = query.Where(p => p.Name.Contains(q) ||
                                         (p.Description != null && p.Description.Contains(q)));
             }
 
@@ -131,37 +132,39 @@ namespace ClothingShop.Controllers
             // Lọc theo size
             if (!string.IsNullOrWhiteSpace(size))
             {
-                query = query.Where(p => p.Size.Contains(size));
+                query = query.Where(p => p.ProductVariants.Any(pv => pv.Size == size && pv.Quantity > 0));
             }
 
             // Lọc theo màu
             if (!string.IsNullOrWhiteSpace(color))
             {
-                query = query.Where(p => p.Color.Contains(color));
+                query = query.Where(p => p.ProductVariants.Any(pv => pv.Color == color && pv.Quantity > 0));
             }
 
             // Đếm tổng số
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
 
-            // Phân trang
-            var products = await query
+            // Phân trang - Load quan hệ ProductVariants để properties [NotMapped] có dữ liệu tính toán in-memory
+            var rawProducts = await query
+                .Include(p => p.ProductVariants)
                 .OrderByDescending(p => p.CreatedAt)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
-                .Select(p => new
-                {
-                    p.Id,
-                    p.Name,
-                    p.Price,
-                    p.ImageUrl,
-                    p.Category,
-                    p.Gender,
-                    p.Size,
-                    p.Color,
-                    p.Quantity
-                })
                 .ToListAsync();
+
+            var products = rawProducts.Select(p => new
+            {
+                p.Id,
+                p.Name,
+                p.Price,
+                p.ImageUrl,
+                p.Category,
+                p.Gender,
+                p.Size,
+                p.Color,
+                p.Quantity
+            }).ToList();
 
             return Json(new
             {
@@ -180,7 +183,7 @@ namespace ClothingShop.Controllers
         [HttpGet]
         public async Task<IActionResult> GetFilters(string? category = null, string? gender = null)
         {
-            var query = _context.Products.Where(p => p.Quantity > 0).AsQueryable();
+            var query = _context.Products.Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0)).AsQueryable();
 
             // Lọc theo danh mục nếu có
             if (!string.IsNullOrWhiteSpace(category))
@@ -207,13 +210,17 @@ namespace ClothingShop.Controllers
                 .Distinct()
                 .ToListAsync();
 
-            // Lấy danh sách size có sẵn (load về memory trước)
+            // Lấy danh sách size và màu có sẵn (load về memory trước từ bảng phụ ProductVariants)
             var productsForFilters = await query
-                .Select(p => new { p.Size, p.Color })
+                .Select(p => new
+                {
+                    Sizes = p.ProductVariants.Select(pv => pv.Size).Distinct(),
+                    Colors = p.ProductVariants.Select(pv => pv.Color).Distinct()
+                })
                 .ToListAsync();
 
             var sizes = productsForFilters
-                .SelectMany(p => p.Size.Split(','))
+                .SelectMany(p => p.Sizes)
                 .Select(s => s.Trim())
                 .Distinct()
                 .OrderBy(s => s)
@@ -221,7 +228,7 @@ namespace ClothingShop.Controllers
 
             // Lấy danh sách màu có sẵn
             var colors = productsForFilters
-                .SelectMany(p => p.Color.Split(','))
+                .SelectMany(p => p.Colors)
                 .Select(c => c.Trim())
                 .Distinct()
                 .OrderBy(c => c)
@@ -251,7 +258,7 @@ namespace ClothingShop.Controllers
         {
             // Lấy top 10 sản phẩm bán chạy
             var bestSellers = await _context.OrderItems
-                .Where(oi => _context.Orders.Any(o => o.Id == oi.OrderId && o.Status == "Đã giao"))
+                .Where(oi => _context.Orders.Any(o => o.Id == oi.OrderId && o.Status == OrderStatus.Delivered.ToVietnamese()))
                 .GroupBy(oi => oi.ProductName)
                 .Select(g => new
                 {
@@ -265,7 +272,7 @@ namespace ClothingShop.Controllers
 
             // Lấy danh mục phổ biến
             var popularCategories = await _context.Products
-                .Where(p => p.Quantity > 0)
+                .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                 .GroupBy(p => p.Category)
                 .Select(g => new
                 {
@@ -296,8 +303,8 @@ namespace ClothingShop.Controllers
 
             // Tìm sản phẩm cùng danh mục hoặc cùng giới tính
             var relatedProducts = await _context.Products
-                .Where(p => p.Id != productId && 
-                           p.Quantity > 0 && 
+                .Where(p => p.Id != productId &&
+                           p.ProductVariants.Any(pv => pv.Quantity > 0) &&
                            (p.Category == product.Category || p.Gender == product.Gender))
                 .OrderByDescending(p => p.CreatedAt)
                 .Take(limit)
@@ -321,7 +328,7 @@ namespace ClothingShop.Controllers
         {
             // Lấy sản phẩm được xem nhiều trong 7 ngày gần đây
             var sevenDaysAgo = DateTime.Now.AddDays(-7);
-            
+
             var trendingProducts = await _context.ProductViews
                 .Where(pv => pv.ViewedAt >= sevenDaysAgo)
                 .GroupBy(pv => pv.ProductId)
@@ -332,7 +339,7 @@ namespace ClothingShop.Controllers
                 })
                 .OrderByDescending(x => x.ViewCount)
                 .Take(limit)
-                .Join(_context.Products.Where(p => p.Quantity > 0),
+                .Join(_context.Products.Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0)),
                       x => x.ProductId,
                       p => p.Id,
                       (x, p) => new
@@ -351,7 +358,7 @@ namespace ClothingShop.Controllers
             if (trendingProducts.Count == 0)
             {
                 trendingProducts = await _context.Products
-                    .Where(p => p.Quantity > 0)
+                    .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                     .OrderByDescending(p => p.CreatedAt)
                     .Take(limit)
                     .Select(p => new

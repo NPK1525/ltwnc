@@ -104,12 +104,10 @@
                                 </div>
 
                                 <div class="mb-3">
-                                    <label class="form-label fw-bold">Giới tính</label>
-                                    <select name="Gender" class="form-select">
-                                        <option value="">Chọn giới tính</option>
+                                    <label class="form-label fw-bold">Giới tính <span class="text-danger">*</span></label>
+                                    <select name="Gender" class="form-select" required>
                                         <option value="Nam" selected="@(Model.Gender == "Nam")">Nam</option>
                                         <option value="Nữ" selected="@(Model.Gender == "Nữ")">Nữ</option>
-                                        <option value="Khác" selected="@(Model.Gender == "Khác")">Khác</option>
                                     </select>
                                 </div>
 

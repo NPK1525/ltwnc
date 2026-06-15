@@ -17,7 +17,7 @@ namespace ClothingShop.Migrations
                     ALTER TABLE [Orders] ADD [FullName] nvarchar(100) NULL;
                 END
             ");
-            
+
             // Cập nhật độ dài cho các cột đã tồn tại
             migrationBuilder.Sql(@"
                 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Orders]') AND name = 'PhoneNumber')
@@ -25,28 +25,28 @@ namespace ClothingShop.Migrations
                     ALTER TABLE [Orders] ALTER COLUMN [PhoneNumber] nvarchar(20) NULL;
                 END
             ");
-            
+
             migrationBuilder.Sql(@"
                 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Orders]') AND name = 'Address')
                 BEGIN
                     ALTER TABLE [Orders] ALTER COLUMN [Address] nvarchar(500) NULL;
                 END
             ");
-            
+
             migrationBuilder.Sql(@"
                 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Orders]') AND name = 'Note')
                 BEGIN
                     ALTER TABLE [Orders] ALTER COLUMN [Note] nvarchar(1000) NULL;
                 END
             ");
-            
+
             migrationBuilder.Sql(@"
                 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Orders]') AND name = 'CancelReason')
                 BEGIN
                     ALTER TABLE [Orders] ALTER COLUMN [CancelReason] nvarchar(500) NULL;
                 END
             ");
-            
+
             migrationBuilder.Sql(@"
                 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Orders]') AND name = 'CancelledBy')
                 BEGIN

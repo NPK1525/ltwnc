@@ -1,4 +1,4 @@
-﻿@inject IHttpContextAccessor HttpContextAccessor
+@inject IHttpContextAccessor HttpContextAccessor
 <!DOCTYPE html>
 <html lang="vi">
 <head>
@@ -145,15 +145,14 @@
                     <i class="fas fa-boxes"></i> Danh sách tồn kho
                 </a>
             </div>
-            
-            <a href="/Admin/Categories/Fashion" class="menu-item @(ViewContext.RouteData.Values["Action"]?.ToString() == "Fashion" && ViewContext.RouteData.Values["Controller"]?.ToString() == "AdminCategories" ? "active" : "")">
-                <i class="fas fa-images"></i> Fashion Category
-            </a>
             <a href="/Admin/Customers" class="menu-item @(ViewContext.RouteData.Values["Controller"]?.ToString() == "AdminCustomers" ? "active" : "")">
                 <i class="fas fa-users"></i> Quản lý khách hàng
             </a>
             <a href="/Admin/Support" class="menu-item @(ViewContext.RouteData.Values["Controller"]?.ToString() == "AdminSupport" ? "active" : "")">
                 <i class="fas fa-headset"></i> Hỗ trợ khách hàng
+            </a>
+            <a href="/Admin/Vouchers" class="menu-item @(ViewContext.RouteData.Values["Controller"]?.ToString() == "AdminVouchers" ? "active" : "")">
+                <i class="fas fa-ticket-alt"></i> Quản lý Voucher
             </a>
             <a href="/" class="menu-item">
                 <i class="fas fa-arrow-left"></i> Về trang chủ
@@ -192,19 +191,19 @@
     
     @if (TempData["Success"] != null)
     {
-        <input type="hidden" id="tempSuccess" value="@Html.Raw(TempData["Success"])" />
+        <input type="hidden" id="tempSuccess" value="@TempData["Success"]" />
     }
     @if (TempData["Error"] != null)
     {
-        <input type="hidden" id="tempError" value="@Html.Raw(TempData["Error"])" />
+        <input type="hidden" id="tempError" value="@TempData["Error"]" />
     }
     @if (TempData["Warning"] != null)
     {
-        <input type="hidden" id="tempWarning" value="@Html.Raw(TempData["Warning"])" />
+        <input type="hidden" id="tempWarning" value="@TempData["Warning"]" />
     }
     @if (TempData["Info"] != null)
     {
-        <input type="hidden" id="tempInfo" value="@Html.Raw(TempData["Info"])" />
+        <input type="hidden" id="tempInfo" value="@TempData["Info"]" />
     }
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>

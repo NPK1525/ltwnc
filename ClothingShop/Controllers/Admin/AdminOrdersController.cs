@@ -1,16 +1,20 @@
 using ClothingShop.Data;
 using ClothingShop.Models;
+using ClothingShop.Models.Enums;
+using ClothingShop.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ClothingShop.Common;
 
 namespace ClothingShop.Controllers.Admin
 {
     [Authorize(Policy = "AdminOnly")]
     [Route("Admin/Orders")]
-    public class AdminOrdersController(ApplicationDbContext context) : Controller
+    public class AdminOrdersController(ApplicationDbContext context, IOrderService orderService) : Controller
     {
         private readonly ApplicationDbContext _context = context;
+        private readonly IOrderService _orderService = orderService;
 
         // GET: /Admin/Orders
         [HttpGet("")]
@@ -49,7 +53,7 @@ namespace ClothingShop.Controllers.Admin
             // Phân trang
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            
+
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalItems = totalItems;
@@ -101,16 +105,17 @@ namespace ClothingShop.Controllers.Admin
             // Kiểm tra không được quay lại trạng thái trước đó
             var statusOrder = new Dictionary<string, int>
             {
-                { "Chờ xác nhận", 1 },
-                { "Chờ lấy hàng", 2 },
-                { "Chờ giao hàng", 3 },
-                { "Đã giao", 4 },
-                { "Đã hủy", 5 }
+                { OrderStatus.WaitingPayment.ToVietnamese(), 0 },
+                { OrderStatus.Pending.ToVietnamese(), 1 },
+                { OrderStatus.Confirmed.ToVietnamese(), 2 },
+                { OrderStatus.Shipping.ToVietnamese(), 3 },
+                { OrderStatus.Delivered.ToVietnamese(), 4 },
+                { OrderStatus.Cancelled.ToVietnamese(), 5 }
             };
 
             if (statusOrder.ContainsKey(oldStatus) && statusOrder.ContainsKey(status))
             {
-                if (statusOrder[status] < statusOrder[oldStatus] && status != "Đã hủy")
+                if (statusOrder[status] < statusOrder[oldStatus] && status != OrderStatus.Cancelled.ToVietnamese())
                 {
                     TempData["Error"] = "Không thể quay lại trạng thái trước đó! Chỉ có thể chuyển tiến hoặc hủy đơn.";
                     return RedirectToAction(nameof(Details), new { id });
@@ -118,52 +123,55 @@ namespace ClothingShop.Controllers.Admin
             }
 
             // Không cho phép cập nhật nếu đơn đã giao hoặc đã hủy
-            if (oldStatus == "Đã giao" || oldStatus == "Đã hủy")
+            if (oldStatus == OrderStatus.Delivered.ToVietnamese() || oldStatus == OrderStatus.Cancelled.ToVietnamese())
             {
                 TempData["Error"] = "Không thể thay đổi trạng thái đơn hàng đã hoàn tất!";
                 return RedirectToAction(nameof(Details), new { id });
             }
 
-            order.Status = status;
-
-            // Nếu hủy đơn, hoàn lại số lượng tồn kho
-            if (status == "Đã hủy" && oldStatus != "Đã hủy")
+            if (!int.TryParse(HttpContext.Session.GetString(Constants.SessionKeys.UserId), out var adminId))
             {
-                foreach (var item in order.Items)
-                {
-                    var product = await _context.Products.FindAsync(item.ProductId);
-                    if (product != null)
-                    {
-                        product.Quantity += item.Quantity;
-                    }
-                }
+                TempData["Error"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!";
+                return RedirectToAction(nameof(Details), new { id });
             }
 
+            if (status == OrderStatus.Cancelled.ToVietnamese() && oldStatus != OrderStatus.Cancelled.ToVietnamese())
+            {
+                try
+                {
+                    await _orderService.CancelOrderAsync(order, "Admin", "Thay đổi trạng thái bởi Admin", adminId);
+                    TempData["Success"] = "Cập nhật trạng thái đơn hàng thành công!";
+                }
+                catch (Exception ex)
+                {
+                    TempData["Error"] = "Có lỗi xảy ra khi hủy đơn hàng: " + ex.Message;
+                }
+                return RedirectToAction(nameof(Details), new { id });
+            }
+
+            order.Status = status;
             await _context.SaveChangesAsync();
 
             // Tạo thông báo cho khách hàng
             var notificationTitle = status switch
             {
-                "Chờ lấy hàng" => "Đơn hàng đã được xác nhận",
-                "Chờ giao hàng" => "Đơn hàng đang được giao",
-                "Đã giao" => "Đơn hàng đã giao thành công",
-                "Đã hủy" => "Đơn hàng đã bị hủy",
+                _ when status == OrderStatus.Confirmed.ToVietnamese() => "Đơn hàng đã được xác nhận",
+                _ when status == OrderStatus.Shipping.ToVietnamese() => "Đơn hàng đang được giao",
+                _ when status == OrderStatus.Delivered.ToVietnamese() => "Đơn hàng đã giao thành công",
                 _ => "Cập nhật trạng thái đơn hàng"
             };
 
             var notificationMessage = status switch
             {
-                "Chờ lấy hàng" => $"Đơn hàng #{order.Id:D6} đã được xác nhận và đang được chuẩn bị.",
-                "Chờ giao hàng" => $"Đơn hàng #{order.Id:D6} đang trên đường giao đến bạn.",
-                "Đã giao" => $"Đơn hàng #{order.Id:D6} đã được giao thành công. Cảm ơn bạn đã mua hàng!",
-                "Đã hủy" => $"Đơn hàng #{order.Id:D6} đã bị hủy bởi quản trị viên.",
+                _ when status == OrderStatus.Confirmed.ToVietnamese() => $"Đơn hàng #{order.Id:D6} đã được xác nhận và đang được chuẩn bị.",
+                _ when status == OrderStatus.Shipping.ToVietnamese() => $"Đơn hàng #{order.Id:D6} đang trên đường giao đến bạn.",
+                _ when status == OrderStatus.Delivered.ToVietnamese() => $"Đơn hàng #{order.Id:D6} đã được giao thành công. Cảm ơn bạn đã mua hàng!",
                 _ => $"Trạng thái đơn hàng #{order.Id:D6} đã được cập nhật."
             };
 
             var notificationType = status switch
             {
-                "Đã giao" => "success",
-                "Đã hủy" => "danger",
+                _ when status == OrderStatus.Delivered.ToVietnamese() => "success",
                 _ => "info"
             };
 
@@ -198,13 +206,13 @@ namespace ClothingShop.Controllers.Admin
                 return RedirectToAction(nameof(Index));
             }
 
-            if (order.Status == "Đã hủy")
+            if (order.Status == OrderStatus.Cancelled.ToVietnamese())
             {
                 TempData["Error"] = "Đơn hàng đã bị hủy trước đó!";
                 return RedirectToAction(nameof(Details), new { id });
             }
 
-            if (order.Status == "Đã giao")
+            if (order.Status == OrderStatus.Delivered.ToVietnamese())
             {
                 TempData["Error"] = "Không thể hủy đơn hàng đã giao!";
                 return RedirectToAction(nameof(Details), new { id });
@@ -216,38 +224,22 @@ namespace ClothingShop.Controllers.Admin
                 return RedirectToAction(nameof(Details), new { id });
             }
 
-            // Cập nhật trạng thái
-            order.Status = "Đã hủy";
-            order.CancelReason = cancelReason;
-            order.CancelledAt = DateTime.Now;
-            order.CancelledBy = "Admin";
-
-            // Hoàn lại số lượng tồn kho
-            foreach (var item in order.Items)
+            if (!int.TryParse(HttpContext.Session.GetString(Constants.SessionKeys.UserId), out var adminId))
             {
-                var product = await _context.Products.FindAsync(item.ProductId);
-                if (product != null)
-                {
-                    product.Quantity += item.Quantity;
-                }
+                TempData["Error"] = "Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!";
+                return RedirectToAction(nameof(Details), new { id });
             }
 
-            await _context.SaveChangesAsync();
-
-            // Tạo thông báo cho khách hàng
-            var notification = new Notification
+            try
             {
-                UserId = order.UserId,
-                Title = "Đơn hàng đã bị hủy",
-                Message = $"Đơn hàng #{order.Id:D6} đã bị hủy bởi quản trị viên. Lý do: {cancelReason}",
-                Type = "danger",
-                OrderId = order.Id,
-                CreatedAt = DateTime.Now
-            };
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
+                await _orderService.CancelOrderAsync(order, "Admin", cancelReason, adminId);
+                TempData["Success"] = $"Đã hủy đơn hàng #{id}. Lý do: {cancelReason}";
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = "Có lỗi xảy ra khi hủy đơn hàng: " + ex.Message;
+            }
 
-            TempData["Success"] = $"Đã hủy đơn hàng #{id}. Lý do: {cancelReason}";
             return RedirectToAction(nameof(Details), new { id });
         }
     }

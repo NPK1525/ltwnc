@@ -3,7 +3,6 @@
     var cartItems = ViewBag.CartItems as List<ClothingShop.Models.CartItem>;
     var totalPrice = (decimal)ViewBag.TotalPrice;
     var user = ViewBag.User as ClothingShop.Models.User;
-    var paymentInfo = ViewBag.PaymentInfo as ClothingShop.Models.PaymentInfo;
 }
 
 <div class="container py-5">
@@ -58,6 +57,7 @@
                         </div>
 
                         <input type="hidden" name="address" id="fullAddress" />
+                        <input type="hidden" name="selectedItems" value="@ViewBag.SelectedItems" />
                         
                         <div class="mb-3" style="display: none;">
                             <label class="form-label">Địa chỉ nhận hàng đầy đủ (Full Address):</label>
@@ -135,13 +135,16 @@
                     <hr>
 
                     <!-- MÃ GIẢM GIÁ -->
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">
-                            <i class="fas fa-ticket-alt me-2 text-success"></i>Mã giảm giá
+                    <div class="mb-3 p-3 bg-light rounded border border-success border-opacity-25">
+                        <label class="form-label fw-bold text-success mb-2">
+                            <i class="fas fa-ticket-alt me-2"></i>Mã giảm giá / Voucher
                         </label>
                         <div class="input-group">
-                            <input type="text" id="couponCode" class="form-control" placeholder="Nhập mã giảm giá" style="text-transform: uppercase;">
-                            <button type="button" class="btn btn-outline-success" onclick="applyCoupon()">
+                            <input type="text" id="couponCode" class="form-control font-monospace fw-bold" placeholder="NHẬP HOẶC CHỌN MÃ" style="text-transform: uppercase;">
+                            <button type="button" id="selectVoucherBtn" class="btn btn-primary d-flex align-items-center" data-bs-toggle="modal" data-bs-target="#availableVouchersModal" onclick="loadAvailableVouchers()">
+                                <i class="fas fa-list me-1"></i> Chọn mã
+                            </button>
+                            <button type="button" id="applyCouponBtn" class="btn btn-success d-flex align-items-center" onclick="applyCoupon()">
                                 <i class="fas fa-check me-1"></i>Áp dụng
                             </button>
                         </div>
@@ -163,7 +166,7 @@
                         <span class="fw-bold" id="subtotalDisplay">@totalPrice.ToString("N0")₫</span>
                     </div>
 
-                    <div class="d-flex justify-content-between mb-2" id="discountRow" style="display: none !important;">
+                    <div class="justify-content-between mb-2 d-none" id="discountRow">
                         <span class="text-success">
                             <i class="fas fa-tag me-1"></i>Giảm giá:
                         </span>
@@ -353,6 +356,7 @@
     async function applyCoupon() {
         const couponCode = document.getElementById('couponCode').value.trim().toUpperCase();
         const messageDiv = document.getElementById('couponMessage');
+        const btn = document.getElementById('applyCouponBtn');
         
         if (!couponCode) {
             showCouponMessage('Vui lòng nhập mã giảm giá', 'warning');
@@ -363,45 +367,49 @@
         messageDiv.innerHTML = '<small class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Đang kiểm tra...</small>';
         
         try {
-            // TODO: Gọi API validate mã giảm giá
-            // Tạm thời giả lập
-            await new Promise(resolve => setTimeout(resolve, 500));
+            const response = await fetch('/Vouchers/Apply', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({
+                    code: couponCode,
+                    subtotal: subtotal
+                })
+            });
             
-            // Giả lập response (sẽ thay bằng API thật)
-            const mockResponse = {
-                isValid: couponCode === 'SUMMER20' || couponCode === 'FREESHIP',
-                discount: couponCode === 'SUMMER20' ? subtotal * 0.2 : 30000,
-                message: couponCode === 'SUMMER20' ? 'Giảm 20% đơn hàng' : 'Giảm 30,000₫ phí ship'
-            };
+            const result = await response.json();
             
-            if (mockResponse.isValid) {
-                currentDiscount = mockResponse.discount;
-                document.getElementById('appliedCouponCode').value = couponCode;
+            if (result.isValid) {
+                currentDiscount = result.discount;
+                document.getElementById('appliedCouponCode').value = result.code;
                 document.getElementById('discountAmount').value = currentDiscount;
                 
                 // Hiển thị giảm giá
-                document.getElementById('discountRow').style.display = 'flex';
+                const discountRow = document.getElementById('discountRow');
+                discountRow.classList.remove('d-none');
+                discountRow.classList.add('d-flex');
                 document.getElementById('discountDisplay').textContent = '-' + currentDiscount.toLocaleString('vi-VN') + '₫';
                 
                 // Cập nhật tổng tiền
                 updateTotal();
                 
                 // Hiển thị thông báo thành công
-                showCouponMessage('✓ ' + mockResponse.message, 'success');
+                showCouponMessage('✓ ' + result.message, 'success');
                 
-                // Disable input
+                // Disable input and select button
                 document.getElementById('couponCode').disabled = true;
+                document.getElementById('selectVoucherBtn').disabled = true;
                 
                 // Đổi nút thành "Hủy"
-                const btn = event.target;
                 btn.innerHTML = '<i class="fas fa-times me-1"></i>Hủy';
-                btn.className = 'btn btn-outline-danger';
+                btn.className = 'btn btn-danger d-flex align-items-center';
                 btn.onclick = removeCoupon;
             } else {
-                showCouponMessage('Mã không hợp lệ hoặc đã hết hạn', 'danger');
+                showCouponMessage(result.message, 'danger');
             }
         } catch (error) {
-            showCouponMessage('Có lỗi xảy ra, vui lòng thử lại', 'danger');
+            showCouponMessage('Có lỗi xảy ra khi kiểm tra mã giảm giá', 'danger');
         }
     }
     
@@ -411,17 +419,20 @@
         document.getElementById('discountAmount').value = '0';
         document.getElementById('couponCode').value = '';
         document.getElementById('couponCode').disabled = false;
+        document.getElementById('selectVoucherBtn').disabled = false;
         
         // Ẩn dòng giảm giá
-        document.getElementById('discountRow').style.display = 'none';
+        const discountRow = document.getElementById('discountRow');
+        discountRow.classList.remove('d-flex');
+        discountRow.classList.add('d-none');
         
         // Cập nhật tổng tiền
         updateTotal();
         
         // Đổi nút về "Áp dụng"
-        const btn = event.target;
+        const btn = document.getElementById('applyCouponBtn');
         btn.innerHTML = '<i class="fas fa-check me-1"></i>Áp dụng';
-        btn.className = 'btn btn-outline-success';
+        btn.className = 'btn btn-success d-flex align-items-center';
         btn.onclick = applyCoupon;
         
         // Xóa thông báo
@@ -482,4 +493,111 @@
 
         return true;
     });
+
+    // ===== DANH SÁCH VOUCHER KHẢ DỤNG =====
+    async function loadAvailableVouchers() {
+        const body = document.getElementById('vouchersModalBody');
+        
+        try {
+            const response = await fetch(`/Vouchers/Available?subtotal=${subtotal}`);
+            const vouchers = await response.json();
+            
+            if (!vouchers || vouchers.length === 0) {
+                body.innerHTML = `
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-ticket-alt fa-3x mb-3 text-secondary"></i>
+                        <p class="mb-0 fw-bold">Hiện không có mã giảm giá nào hoạt động!</p>
+                    </div>`;
+                return;
+            }
+            
+            let html = '<div class="d-flex flex-column gap-3">';
+            vouchers.forEach(v => {
+                const isMinMet = subtotal >= v.minOrderAmount;
+                const remaining = v.minOrderAmount - subtotal;
+                
+                let discountText = '';
+                if (v.discountType === 0) { // Percentage
+                    discountText = `Giảm ${v.discountValue}%`;
+                    if (v.maxDiscountAmount) {
+                        discountText += ` (Tối đa ${v.maxDiscountAmount.toLocaleString('vi-VN')}₫)`;
+                    }
+                } else { // FixedAmount
+                    discountText = `Giảm -${v.discountValue.toLocaleString('vi-VN')}₫`;
+                }
+                
+                html += `
+                    <div class="card border border-2 ${isMinMet ? 'border-success' : 'border-light'} shadow-sm position-relative overflow-hidden">
+                        <div class="card-body p-3">
+                            <div class="row align-items-center">
+                                <div class="col-8">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <span class="badge bg-secondary font-monospace text-dark px-2 py-1">${v.code}</span>
+                                        <span class="fw-bold text-success small">${discountText}</span>
+                                    </div>
+                                    <p class="mb-1 small fw-bold text-dark">${v.description || 'Không có mô tả chi tiết'}</p>
+                                    <p class="mb-0 text-muted small" style="font-size: 0.75rem;">
+                                        Đơn tối thiểu: <strong>${v.minOrderAmount.toLocaleString('vi-VN')}₫</strong><br/>
+                                        HSD: ${new Date(v.endDate).toLocaleDateString('vi-VN')}
+                                    </p>
+                                </div>
+                                <div class="col-4 text-end">
+                                    ${isMinMet ? `
+                                        <button type="button" class="btn btn-success btn-sm px-3 rounded-pill" onclick="selectVoucher('${v.code}')">
+                                            Áp dụng
+                                        </button>
+                                    ` : `
+                                        <button type="button" class="btn btn-outline-secondary btn-sm px-2 rounded-pill" disabled style="font-size: 0.75rem;">
+                                            Cần mua thêm ${remaining.toLocaleString('vi-VN')}₫
+                                        </button>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            body.innerHTML = html;
+        } catch (error) {
+            body.innerHTML = `
+                <div class="alert alert-danger mb-0 small">
+                    Có lỗi xảy ra khi tải danh sách voucher. Vui lòng thử lại!
+                </div>`;
+        }
+    }
+    
+    function selectVoucher(code) {
+        document.getElementById('couponCode').value = code;
+        
+        // Đóng modal
+        const modalEl = document.getElementById('availableVouchersModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        if (modal) {
+            modal.hide();
+        }
+        
+        // Áp dụng voucher
+        applyCoupon();
+    }
 </script>
+
+<!-- Modal Danh sách Voucher -->
+<div class="modal fade" id="availableVouchersModal" tabindex="-1" aria-labelledby="availableVouchersModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-md">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="availableVouchersModalLabel">
+                    <i class="fas fa-ticket-alt me-2"></i>Mã giảm giá dành cho bạn
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3" id="vouchersModalBody" style="max-height: 400px; overflow-y: auto;">
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x text-muted mb-2"></i>
+                    <p class="text-muted small mb-0">Đang tải danh sách mã giảm giá...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

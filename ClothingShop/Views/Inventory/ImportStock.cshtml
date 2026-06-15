@@ -40,11 +40,28 @@
                         </select>
                     </div>
                     
+                    <!-- Lựa chọn biến thể Size & Màu sắc (Tách biệt để dễ quản lý) -->
+                    <div class="row mb-3" id="variantWrapper" style="display: none;">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Kích cỡ (Size) <span class="text-danger">*</span></label>
+                            <select id="sizeSelect" class="form-select" required onchange="onSizeChange()">
+                                <option value="">-- Chọn Size --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Màu sắc <span class="text-danger">*</span></label>
+                            <select id="colorSelect" class="form-select" required onchange="onColorChange()">
+                                <option value="">-- Chọn Màu --</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="variantId" id="variantIdHidden" required />
+                    </div>
+                    
                     <!-- Thông tin hiện tại -->
                     <div id="currentInfo" class="alert alert-info" style="display: none;">
                         <div class="row">
                             <div class="col-md-6">
-                                <strong>Tồn kho hiện tại:</strong> <span id="currentQuantity" class="text-primary">0</span>
+                                <strong>Tồn kho của biến thể hiện tại:</strong> <span id="currentQuantity" class="text-primary">0</span>
                             </div>
                             <div class="col-md-6">
                                 <strong>Giá bán hiện tại:</strong> <span id="currentPrice" class="text-danger">0₫</span>
@@ -53,9 +70,15 @@
                     </div>
                     
                     <div class="mb-3">
+                        <label class="form-label">Mã lô hàng <span class="text-danger">*</span></label>
+                        <input type="text" name="batchNumber" id="batchNumberInput" class="form-control" required placeholder="Nhập mã lô hàng" />
+                        <small class="text-muted">Mã lô hàng giúp quản lý tồn kho theo lô (Tự động sinh hoặc bạn có thể tự sửa)</small>
+                    </div>
+                    
+                    <div class="mb-3">
                         <label class="form-label">Số lượng <span class="text-danger">*</span></label>
                         <input type="number" name="quantity" class="form-control" min="1" required placeholder="Số lượng nhập thêm" />
-                        <small class="text-muted">Nhập số lượng muốn thêm vào kho</small>
+                        <small class="text-muted">Nhập số lượng muốn thêm vào kho cho biến thể đã chọn</small>
                     </div>
                     
                     <div class="row">
@@ -66,9 +89,9 @@
                         </div>
                         
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Giá bán (₫) <span class="text-danger">*</span></label>
+                            <label class="form-label">Giá bán mới của biến thể (₫) <span class="text-danger">*</span></label>
                             <input type="number" name="sellingPrice" class="form-control" min="0" step="1000" placeholder="Giá bán cho khách" required />
-                            <small class="text-muted">Giá hiển thị trên website</small>
+                            <small class="text-muted">Giá bán riêng cho biến thể này</small>
                         </div>
                     </div>
                     
@@ -93,25 +116,121 @@
 
 @section Scripts {
     <script>
-        function updateProductInfo() {
+        let currentVariants = [];
+
+        function generateAutoBatchNumber() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+            return `BATCH-${year}${month}${day}-${hours}${minutes}${seconds}`;
+        }
+
+        async function updateProductInfo() {
             const select = document.getElementById('productSelect');
             const option = select.options[select.selectedIndex];
             
+            const variantWrapper = document.getElementById('variantWrapper');
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const variantIdHidden = document.getElementById('variantIdHidden');
+            
+            // Xóa dữ liệu cũ
+            sizeSelect.innerHTML = '<option value="">-- Chọn Size --</option>';
+            colorSelect.innerHTML = '<option value="">-- Chọn Màu --</option>';
+            variantIdHidden.value = '';
+            document.getElementById('currentInfo').style.display = 'none';
+            variantWrapper.style.display = 'none';
+
             if (option.value) {
+                const productId = option.value;
+                
+                try {
+                    const response = await fetch(`/Admin/Inventory/GetVariants?productId=${productId}`);
+                    if (response.ok) {
+                        currentVariants = await response.json();
+                        
+                        // Lấy danh sách size độc nhất
+                        const uniqueSizes = [...new Set(currentVariants.map(v => v.size))];
+                        
+                        uniqueSizes.forEach(size => {
+                            const opt = document.createElement('option');
+                            opt.value = size;
+                            opt.textContent = size;
+                            sizeSelect.appendChild(opt);
+                        });
+
+                        variantWrapper.style.display = 'flex';
+                    }
+                } catch (e) {
+                    console.error("Lỗi khi tải biến thể:", e);
+                }
+            }
+        }
+
+        function onSizeChange() {
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const variantIdHidden = document.getElementById('variantIdHidden');
+            
+            const selectedSize = sizeSelect.value;
+            
+            // Xóa màu cũ
+            colorSelect.innerHTML = '<option value="">-- Chọn Màu --</option>';
+            variantIdHidden.value = '';
+            document.getElementById('currentInfo').style.display = 'none';
+            
+            if (selectedSize) {
+                // Lọc các màu của size tương ứng
+                const availableVariants = currentVariants.filter(v => v.size === selectedSize);
+                
+                availableVariants.forEach(variant => {
+                    const opt = document.createElement('option');
+                    opt.value = variant.color;
+                    opt.textContent = `${variant.color} (Tồn: ${variant.quantity})`;
+                    opt.dataset.variantId = variant.id;
+                    opt.dataset.quantity = variant.quantity;
+                    opt.dataset.price = variant.price;
+                    colorSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function onColorChange() {
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const option = colorSelect.options[colorSelect.selectedIndex];
+            const variantIdHidden = document.getElementById('variantIdHidden');
+
+            if (option.value) {
+                const variantId = option.dataset.variantId;
                 const quantity = option.dataset.quantity;
                 const price = option.dataset.price;
-                
+
+                variantIdHidden.value = variantId;
                 document.getElementById('currentQuantity').textContent = quantity;
                 document.getElementById('currentPrice').textContent = parseFloat(price).toLocaleString('vi-VN') + '₫';
                 document.getElementById('currentInfo').style.display = 'block';
+                
+                // Điền sẵn giá bán hiện tại của biến thể vào ô nhập giá bán
+                document.getElementsByName('sellingPrice')[0].value = price;
             } else {
+                variantIdHidden.value = '';
                 document.getElementById('currentInfo').style.display = 'none';
             }
         }
         
-        // Tự động hiển thị nếu đã chọn sản phẩm
+        // Tự động hiển thị nếu đã chọn sẵn sản phẩm
         document.addEventListener('DOMContentLoaded', function() {
-            updateProductInfo();
+            // Tự động điền mã lô hàng
+            document.getElementById('batchNumberInput').value = generateAutoBatchNumber();
+
+            if (document.getElementById('productSelect').value) {
+                updateProductInfo();
+            }
         });
     </script>
 }

@@ -17,10 +17,9 @@ namespace ClothingShop.Controllers
 
             IQueryable<ProductView> query;
 
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
             {
                 // Nếu đã đăng nhập, lấy theo UserId
-                var userId = int.Parse(userIdString);
                 query = _context.ProductViews
                     .Include(pv => pv.Product)
                     .Where(pv => pv.UserId == userId);
@@ -35,7 +34,7 @@ namespace ClothingShop.Controllers
 
             // Lấy tất cả lịch sử xem trước
             var allViews = await query.ToListAsync();
-            
+
             // Lấy sản phẩm duy nhất (distinct by ProductId) và sắp xếp theo thời gian xem gần nhất
             var productViews = allViews
                 .GroupBy(pv => pv.ProductId)
@@ -60,7 +59,7 @@ namespace ClothingShop.Controllers
             if (totalItems == 0)
             {
                 var recommendedProducts = await _context.Products
-                    .Where(p => p.Quantity > 0)
+                    .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                     .OrderByDescending(p => p.CreatedAt)
                     .Take(8)
                     .ToListAsync();
@@ -84,9 +83,9 @@ namespace ClothingShop.Controllers
             var sessionId = HttpContext.Session.Id;
 
             int? userId = null;
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var parsedUserId))
             {
-                userId = int.Parse(userIdString);
+                userId = parsedUserId;
             }
 
             // Kiểm tra xem đã xem trong vòng 5 phút chưa (tránh spam)
@@ -129,9 +128,8 @@ namespace ClothingShop.Controllers
 
             IQueryable<ProductView> query;
 
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
             {
-                var userId = int.Parse(userIdString);
                 query = _context.ProductViews
                     .Include(pv => pv.Product)
                     .Where(pv => pv.UserId == userId);
@@ -169,9 +167,8 @@ namespace ClothingShop.Controllers
             var userIdString = HttpContext.Session.GetString("UserId");
             var sessionId = HttpContext.Session.Id;
 
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
             {
-                var userId = int.Parse(userIdString);
                 var views = await _context.ProductViews
                     .Where(pv => pv.UserId == userId)
                     .ToListAsync();
@@ -198,9 +195,8 @@ namespace ClothingShop.Controllers
             var userIdString = HttpContext.Session.GetString("UserId");
             var sessionId = HttpContext.Session.Id;
 
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
             {
-                var userId = int.Parse(userIdString);
                 var views = await _context.ProductViews
                     .Where(pv => pv.UserId == userId && pv.ProductId == productId)
                     .ToListAsync();
@@ -230,9 +226,8 @@ namespace ClothingShop.Controllers
             // Lấy danh mục và giới tính từ lịch sử xem
             IQueryable<ProductView> query;
 
-            if (!string.IsNullOrEmpty(userIdString))
+            if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
             {
-                var userId = int.Parse(userIdString);
                 query = _context.ProductViews
                     .Include(pv => pv.Product)
                     .Where(pv => pv.UserId == userId);
@@ -252,7 +247,7 @@ namespace ClothingShop.Controllers
             {
                 // Nếu chưa có lịch sử, trả về sản phẩm mới nhất
                 var newProducts = await _context.Products
-                    .Where(p => p.Quantity > 0)
+                    .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                     .OrderByDescending(p => p.CreatedAt)
                     .Take(limit)
                     .Select(p => new
@@ -286,7 +281,7 @@ namespace ClothingShop.Controllers
 
             // Tìm sản phẩm tương tự
             var recommendations = await _context.Products
-                .Where(p => p.Quantity > 0 &&
+                .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0) &&
                            !viewedProductIds.Contains(p.Id) &&
                            (p.Category == popularCategory || p.Gender == popularGender))
                 .OrderByDescending(p => p.CreatedAt)

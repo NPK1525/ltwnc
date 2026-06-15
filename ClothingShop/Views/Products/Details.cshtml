@@ -1,4 +1,4 @@
-﻿@model ClothingShop.Models.Product
+@model ClothingShop.Models.Product
 @{
     ViewData["Title"] = Model.Name;
 }
@@ -61,7 +61,7 @@
             </div>
             
             <div class="d-flex align-items-center gap-3 mb-4">
-                <h2 class="text-danger fw-bold mb-0">@(Model.Price.ToString("#,##0"))₫</h2>
+                <h2 class="text-danger fw-bold mb-0" id="productPrice">@(Model.Price.ToString("#,##0"))₫</h2>
                 @if (Model.Quantity > 0)
                 {
                     <span class="badge bg-success">Còn hàng</span>
@@ -134,7 +134,8 @@
                         {
                             try
                             {
-                                var sizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.Size);
+                                var rawSizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.Size);
+                                var sizes = ClothingShop.Common.ProductVariantHelper.SortSizes(rawSizes);
                                 if (sizes != null && sizes.Any())
                                 {
                                     foreach (var size in sizes)
@@ -179,7 +180,7 @@
                     <div class="mb-4">
                         <h6 class="fw-bold mb-3">Số lượng</h6>
                         <input type="number" name="quantity" value="1" min="1" max="@Model.Quantity" class="form-control" style="width: 100px;" id="quantityInput" />
-                        <small class="text-muted">Còn @Model.Quantity sản phẩm</small>
+                        <small class="text-muted" id="variantStockText">Còn <span id="variantStockCount">@Model.Quantity</span> sản phẩm (Vui lòng chọn Size & Màu để xem tồn kho chi tiết)</small>
                     </div>
 
                     <div class="d-grid gap-2 mb-3">
@@ -293,7 +294,8 @@
                                     @{
                                         try
                                         {
-                                            var sizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.Size);
+                                            var rawSizes = System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.Size);
+                                            var sizes = ClothingShop.Common.ProductVariantHelper.SortSizes(rawSizes);
                                             if (sizes != null && sizes.Any())
                                             {
                                                 @string.Join(", ", sizes)
@@ -381,7 +383,7 @@
                         <div class="card mb-4 border-primary">
                             <div class="card-body">
                                 <h5 class="card-title">Viết đánh giá của bạn</h5>
-                                <p class="text-muted small">Bạn có thể đánh giá nhiều lần để chia sẻ trải nghiệm của mình</p>
+                                <p class="text-muted small">Mỗi đơn hàng bạn chỉ có thể đánh giá sản phẩm một lần.</p>
                                 <form asp-controller="Reviews" asp-action="Add" method="post">
                                     <input type="hidden" name="productId" value="@Model.Id" />
                                     <input type="hidden" name="orderId" value="@ViewBag.OrderId" />
@@ -570,6 +572,8 @@
             
             // Ẩn thông báo lỗi
             document.getElementById('colorError').style.display = 'none';
+            
+            updateStockDisplay();
         }
         
         // Chọn kích thước
@@ -594,6 +598,85 @@
             
             // Ẩn thông báo lỗi
             document.getElementById('sizeError').style.display = 'none';
+            
+            updateStockDisplay();
+        }
+
+        // Serialize biến thể từ backend sang Javascript bao gồm cả Price
+        const productVariants = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(ClothingShop.Common.ProductVariantHelper.FilterActiveVariants(Model).Select(pv => new { pv.Size, pv.Color, pv.Quantity, pv.Price })));
+        const defaultProductPrice = @Model.Price;
+
+        function updateStockDisplay() {
+            const selectedColor = document.getElementById('selectedColor').value;
+            const selectedSize = document.getElementById('selectedSize').value;
+            
+            const stockTextElement = document.getElementById('variantStockText');
+            const qtyInput = document.getElementById('quantityInput');
+            const addToCartFormBtn = document.querySelector('#addToCartForm button[type="submit"]');
+            const buyNowFormBtn = document.querySelector('#buyNowForm button[type="submit"]');
+            const priceElement = document.getElementById('productPrice');
+
+            if (!selectedColor || (!selectedSize && selectedSize !== 'N/A')) {
+                if (stockTextElement) {
+                    stockTextElement.innerHTML = `Còn <span id="variantStockCount">${@Model.Quantity}</span> sản phẩm (Vui lòng chọn Size & Màu để xem tồn kho chi tiết)`;
+                    stockTextElement.className = "text-muted";
+                }
+                if (qtyInput) {
+                    qtyInput.max = @Model.Quantity;
+                }
+                if (addToCartFormBtn) addToCartFormBtn.disabled = false;
+                if (buyNowFormBtn) buyNowFormBtn.disabled = false;
+                
+                // Trả về giá mặc định ban đầu của sản phẩm
+                if (priceElement) {
+                    priceElement.textContent = defaultProductPrice.toLocaleString('vi-VN') + '₫';
+                }
+                return;
+            }
+
+            // Tìm biến thể khớp với lựa chọn màu và kích cỡ
+            const variant = productVariants.find(pv => 
+                pv.Color === selectedColor && 
+                (selectedSize === 'N/A' || pv.Size === selectedSize)
+            );
+
+            if (variant) {
+                // Cập nhật giá bán biến thể động
+                if (priceElement) {
+                    const activePrice = variant.Price > 0 ? variant.Price : defaultProductPrice;
+                    priceElement.textContent = activePrice.toLocaleString('vi-VN') + '₫';
+                }
+
+                if (variant.Quantity > 0) {
+                    if (stockTextElement) {
+                        stockTextElement.innerHTML = `Còn <span class="fw-bold text-success" id="variantStockCount">${variant.Quantity}</span> sản phẩm của loại này`;
+                        stockTextElement.className = "text-muted";
+                    }
+                    if (qtyInput) {
+                        qtyInput.max = variant.Quantity;
+                        if (parseInt(qtyInput.value) > variant.Quantity) {
+                            qtyInput.value = variant.Quantity;
+                        }
+                    }
+                    if (addToCartFormBtn) addToCartFormBtn.disabled = false;
+                    if (buyNowFormBtn) buyNowFormBtn.disabled = false;
+                } else {
+                    if (stockTextElement) {
+                        stockTextElement.innerHTML = `<span class="text-danger fw-bold"><i class="fas fa-times-circle me-1"></i>Biến thể này hiện đang tạm hết hàng!</span>`;
+                    }
+                    if (addToCartFormBtn) addToCartFormBtn.disabled = true;
+                    if (buyNowFormBtn) buyNowFormBtn.disabled = true;
+                }
+            } else {
+                if (priceElement) {
+                    priceElement.textContent = defaultProductPrice.toLocaleString('vi-VN') + '₫';
+                }
+                if (stockTextElement) {
+                    stockTextElement.innerHTML = `<span class="text-danger fw-bold"><i class="fas fa-times-circle me-1"></i>Sản phẩm loại này không có sẵn!</span>`;
+                }
+                if (addToCartFormBtn) addToCartFormBtn.disabled = true;
+                if (buyNowFormBtn) buyNowFormBtn.disabled = true;
+            }
         }
         
         // Validate form thêm vào giỏ
@@ -793,12 +876,21 @@
             border: none;
             cursor: pointer;
             z-index: 10;
-            transition: all 0.3s ease;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .related-carousel:hover .related-btn {
+            opacity: 1;
+            visibility: visible;
         }
 
         .related-btn:hover {
             background: #333;
-            transform: translateY(-50%) scale(1.1);
+            transform: translateY(-50%) scale(1.1) !important;
+            opacity: 1 !important;
+            visibility: visible !important;
         }
 
         .related-btn-prev {

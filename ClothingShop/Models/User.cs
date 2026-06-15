@@ -25,7 +25,7 @@ namespace ClothingShop.Models
         public DateTime CreatedAt { get; set; }
 
         public bool IsAdmin { get; set; } = false;
-        
+
         public bool IsActive { get; set; } = true;
     }
 }

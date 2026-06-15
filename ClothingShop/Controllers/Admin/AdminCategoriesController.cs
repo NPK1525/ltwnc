@@ -13,7 +13,7 @@ namespace ClothingShop.Controllers.Admin
         private readonly ApplicationDbContext _context = context;
 
         // ==================== PRODUCT CATEGORIES ====================
-        
+
         // GET: /Admin/Categories/Product
         [HttpGet("Product")]
         public async Task<IActionResult> Product()

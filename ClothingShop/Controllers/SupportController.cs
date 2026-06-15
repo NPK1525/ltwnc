@@ -13,12 +13,10 @@ namespace ClothingShop.Controllers
         public async Task<IActionResult> Index()
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
             var tickets = await _context.SupportTickets
                 .Include(t => t.Messages)
                 .Where(t => t.UserId == userId)
@@ -30,21 +28,19 @@ namespace ClothingShop.Controllers
 
         // TẠO TICKET MỚI
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(string subject, string message)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
             if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(message))
             {
                 TempData["Error"] = "Vui lòng điền đầy đủ thông tin!";
                 return RedirectToAction("Index");
             }
-
-            var userId = int.Parse(userIdString);
             var ticket = new SupportTicket
             {
                 UserId = userId,
@@ -77,12 +73,10 @@ namespace ClothingShop.Controllers
         public async Task<IActionResult> Details(int id)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
             var ticket = await _context.SupportTickets
                 .Include(t => t.Messages)
                     .ThenInclude(m => m.Sender)
@@ -98,21 +92,19 @@ namespace ClothingShop.Controllers
 
         // GỬI TIN NHẮN
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> SendMessage(int ticketId, string message)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
             if (string.IsNullOrWhiteSpace(message))
             {
                 TempData["Error"] = "Vui lòng nhập nội dung tin nhắn!";
                 return RedirectToAction("Details", new { id = ticketId });
             }
-
-            var userId = int.Parse(userIdString);
             var ticket = await _context.SupportTickets
                 .FirstOrDefaultAsync(t => t.Id == ticketId && t.UserId == userId);
 
@@ -139,15 +131,14 @@ namespace ClothingShop.Controllers
 
         // ĐÓNG TICKET
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Close(int id)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
             var ticket = await _context.SupportTickets
                 .FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId);
 

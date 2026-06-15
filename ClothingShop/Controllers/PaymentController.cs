@@ -1,20 +1,27 @@
 using ClothingShop.Data;
 using ClothingShop.Services;
+using ClothingShop.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ClothingShop.Common;
+using Microsoft.AspNetCore.Authorization;
+using ClothingShop.Models.Enums;
 
 namespace ClothingShop.Controllers;
 
-public class PaymentController(ApplicationDbContext context, IVNPayService vnPayService) : Controller
+[Authorize]
+public class PaymentController(ApplicationDbContext context, IVNPayService vnPayService, IOrderService orderService, ICartService cartService) : Controller
 {
     private readonly ApplicationDbContext _context = context;
     private readonly IVNPayService _vnPayService = vnPayService;
+    private readonly IOrderService _orderService = orderService;
+    private readonly ICartService _cartService = cartService;
 
     // GET: /Payment/VNPay
     [HttpGet]
-    public IActionResult VNPay(int orderId)
+    public async Task<IActionResult> VNPay(int orderId)
     {
-        var order = _context.Orders.Find(orderId);
+        var order = await _context.Orders.FindAsync(orderId);
         if (order == null)
         {
             TempData["Error"] = "Không tìm thấy đơn hàng!";
@@ -23,10 +30,11 @@ public class PaymentController(ApplicationDbContext context, IVNPayService vnPay
 
         // Lấy IP address
         string ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-        
+
         // Tạo URL thanh toán
         string orderInfo = $"Thanh toán đơn hàng #{orderId:D6}";
-        string paymentUrl = _vnPayService.CreatePaymentUrl(orderId, order.TotalAmount, orderInfo, ipAddress);
+        string returnUrl = $"{Request.Scheme}://{Request.Host}/Payment/VNPayReturn";
+        string paymentUrl = _vnPayService.CreatePaymentUrl(orderId.ToString(), order.TotalAmount, orderInfo, ipAddress, returnUrl);
 
         return Redirect(paymentUrl);
     }
@@ -35,15 +43,13 @@ public class PaymentController(ApplicationDbContext context, IVNPayService vnPay
     [HttpGet]
     public async Task<IActionResult> VNPayReturn()
     {
-        // Lấy tất cả query params
         var queryParams = Request.Query;
-        
-        // Lấy vnp_SecureHash
+
         string vnpSecureHash = queryParams["vnp_SecureHash"]!;
-        
+
         // Validate signature
         bool isValidSignature = _vnPayService.ValidateSignature(queryParams, vnpSecureHash);
-        
+
         if (!isValidSignature)
         {
             TempData["Error"] = "Chữ ký không hợp lệ!";
@@ -54,85 +60,73 @@ public class PaymentController(ApplicationDbContext context, IVNPayService vnPay
         string vnpResponseCode = queryParams["vnp_ResponseCode"]!;
         string vnpTransactionNo = queryParams["vnp_TransactionNo"]!;
         string vnpTxnRef = queryParams["vnp_TxnRef"]!;
-        string vnpAmount = queryParams["vnp_Amount"]!;
-        
-        int orderId = int.Parse(vnpTxnRef);
-        var order = await _context.Orders.FindAsync(orderId);
-        
+
+        // Parse orderId từ TxnRef (chính là order.Id dạng string)
+        if (!int.TryParse(vnpTxnRef, out int orderId))
+        {
+            TempData["Error"] = "Mã giao dịch không hợp lệ!";
+            return RedirectToAction("Index", "Orders");
+        }
+
+        // Tìm đơn hàng tương ứng
+        var order = await _context.Orders
+            .Include(o => o.Items)
+            .FirstOrDefaultAsync(o => o.Id == orderId);
+
         if (order == null)
         {
-            TempData["Error"] = "Không tìm thấy đơn hàng!";
+            TempData["Error"] = "Không tìm thấy đơn hàng tương ứng!";
             return RedirectToAction("Index", "Orders");
+        }
+
+        // Nếu đơn hàng đã được cập nhật trạng thái trước đó (ví dụ từ IPN hoặc load lại trang)
+        if (order.Status != OrderStatus.WaitingPayment.ToVietnamese())
+        {
+            if (order.Status == OrderStatus.Pending.ToVietnamese())
+            {
+                TempData["Success"] = $"Thanh toán thành công! Mã giao dịch: {vnpTransactionNo}";
+                return RedirectToAction("OrderSuccess", "Orders", new { id = order.Id });
+            }
+            else
+            {
+                TempData["Error"] = "Đơn hàng đã được xử lý hoặc hủy trước đó!";
+                return RedirectToAction("Index", "Orders");
+            }
         }
 
         // Kiểm tra kết quả thanh toán
         if (vnpResponseCode == "00")
         {
-            // Thanh toán thành công
-            // Cập nhật trạng thái đơn hàng từ "Chờ thanh toán" sang "Chờ xác nhận"
-            order.Status = "Chờ xác nhận";
-            
-            // Cập nhật số lượng tồn kho
-            var orderItems = await _context.OrderItems
-                .Where(oi => oi.OrderId == orderId)
-                .ToListAsync();
-                
-            foreach (var item in orderItems)
+            // Thanh toán thành công -> Cập nhật sang "Chờ xác nhận"
+            try
             {
-                var product = await _context.Products.FindAsync(item.ProductId);
-                if (product != null)
+                order.Status = OrderStatus.Pending.ToVietnamese();
+
+                // Tạo thông báo
+                var notification = new Notification
                 {
-                    product.Quantity -= item.Quantity;
-                }
+                    UserId = order.UserId,
+                    Title = "Thanh toán thành công",
+                    Message = $"Đơn hàng #{order.Id:D6} của bạn đã được thanh toán thành công qua VNPay. Mã giao dịch: {vnpTransactionNo}",
+                    Type = "success",
+                    OrderId = order.Id,
+                    CreatedAt = DateTime.Now
+                };
+                _context.Notifications.Add(notification);
+                await _context.SaveChangesAsync();
+
+                TempData["Success"] = $"Thanh toán thành công! Mã giao dịch: {vnpTransactionNo}";
+                return RedirectToAction("OrderSuccess", "Orders", new { id = order.Id });
             }
-            
-            await _context.SaveChangesAsync();
-            
-            // Tạo thông báo cho khách hàng
-            var notification = new ClothingShop.Models.Notification
+            catch (Exception ex)
             {
-                UserId = order.UserId,
-                Title = "Thanh toán thành công",
-                Message = $"Đơn hàng #{order.Id:D6} đã được thanh toán thành công qua VNPay. Mã giao dịch: {vnpTransactionNo}",
-                Type = "success",
-                OrderId = order.Id,
-                CreatedAt = DateTime.Now
-            };
-            _context.Notifications.Add(notification);
-            await _context.SaveChangesAsync();
-            
-            // Xóa session giỏ hàng
-            var cartService = HttpContext.RequestServices.GetRequiredService<ClothingShop.Services.ICartService>();
-            cartService.ClearCart();
-            
-            // Xóa session "Mua Ngay" nếu có
-            HttpContext.Session.Remove("BuyNowProductId");
-            HttpContext.Session.Remove("BuyNowQuantity");
-            HttpContext.Session.Remove("BuyNowSize");
-            HttpContext.Session.Remove("BuyNowColor");
-            
-            // Xóa session pending order
-            HttpContext.Session.Remove("PendingOrder_Id");
-            HttpContext.Session.Remove("PendingOrder_FullName");
-            HttpContext.Session.Remove("PendingOrder_PhoneNumber");
-            HttpContext.Session.Remove("PendingOrder_Address");
-            HttpContext.Session.Remove("PendingOrder_Note");
-            HttpContext.Session.Remove("PendingOrder_PaymentMethod");
-            HttpContext.Session.Remove("PendingOrder_TotalAmount");
-            
-            TempData["Success"] = $"Thanh toán thành công! Mã giao dịch: {vnpTransactionNo}";
-            return RedirectToAction("OrderSuccess", "Orders", new { id = orderId });
+                TempData["Error"] = "Có lỗi xảy ra khi xác nhận đơn hàng: " + ex.Message;
+                return RedirectToAction("Index", "Orders");
+            }
         }
         else
         {
-            // Thanh toán thất bại - Xóa đơn hàng tạm
-            if (order.Status == "Chờ thanh toán")
-            {
-                _context.Orders.Remove(order);
-                await _context.SaveChangesAsync();
-            }
-            
-            // Thanh toán thất bại
+            // Thanh toán thất bại -> Hủy đơn hàng và hoàn kho
             string errorMessage = vnpResponseCode switch
             {
                 "07" => "Trừ tiền thành công. Giao dịch bị nghi ngờ (liên quan tới lừa đảo, giao dịch bất thường).",
@@ -148,7 +142,16 @@ public class PaymentController(ApplicationDbContext context, IVNPayService vnPay
                 "79" => "Giao dịch không thành công do: KH nhập sai mật khẩu thanh toán quá số lần quy định.",
                 _ => "Giao dịch không thành công!"
             };
-            
+
+            try
+            {
+                await _orderService.CancelOrderAsync(order, "System", $"Thanh toán VNPay thất bại: {errorMessage}", order.UserId);
+            }
+            catch (Exception)
+            {
+                // Ghi nhận lỗi hủy đơn hàng nếu có
+            }
+
             TempData["Error"] = errorMessage;
             return RedirectToAction("Checkout", "Orders");
         }

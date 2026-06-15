@@ -205,7 +205,7 @@
                                                     }
                                                     else
                                                     {
-                                                        <a href="@Url.Action("Details", "Products", new { id = item.ProductId })#reviews" class="btn btn-sm btn-outline-warning">
+                                                        <a href="@Url.Action("Details", "Products", new { id = item.ProductId, orderId = Model.Id })#reviews" class="btn btn-sm btn-outline-warning">
                                                             <i class="fas fa-star me-1"></i>Đánh giá
                                                         </a>
                                                     }
@@ -221,17 +221,26 @@
                             <tfoot class="table-light">
                                 @{
                                     decimal itemsTotal = Model.Items.Sum(i => i.Price * i.Quantity);
-                                    decimal shippingFee = Model.TotalAmount - itemsTotal;
+                                    decimal shippingFee = itemsTotal < 500000 ? 20000 : 0;
                                 }
                                 <tr>
-                                    <td colspan="3" class="text-end fw-bold">Tạm tính:</td>
-                                    <td class="text-end fw-bold">@itemsTotal.ToString("N0")₫</td>
+                                    <td colspan="3" class="text-end fw-bold text-muted">Tạm tính:</td>
+                                    <td class="text-end fw-bold text-muted">@itemsTotal.ToString("N0")₫</td>
                                 </tr>
+                                @if (Model.DiscountAmount > 0)
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-end fw-bold text-success">
+                                            <i class="fas fa-tag me-1"></i>Giảm giá @(string.IsNullOrEmpty(Model.VoucherCode) ? "" : $"({Model.VoucherCode})"):
+                                        </td>
+                                        <td class="text-end text-success fw-bold">-@Model.DiscountAmount.ToString("N0")₫</td>
+                                    </tr>
+                                }
                                 <tr>
-                                    <td colspan="3" class="text-end fw-bold">Phí vận chuyển:</td>
+                                    <td colspan="3" class="text-end fw-bold text-muted">Phí vận chuyển:</td>
                                     @if (shippingFee > 0)
                                     {
-                                        <td class="text-end text-danger fw-bold">@shippingFee.ToString("N0")₫</td>
+                                        <td class="text-end text-muted fw-bold">@shippingFee.ToString("N0")₫</td>
                                     }
                                     else
                                     {
@@ -239,7 +248,7 @@
                                     }
                                 </tr>
                                 <tr>
-                                    <td colspan="3" class="text-end fw-bold fs-5">Tổng cộng:</td>
+                                    <td colspan="3" class="text-end fw-bold fs-5 text-dark">Tổng cộng:</td>
                                     <td class="text-end text-danger fw-bold fs-5">@Model.TotalAmount.ToString("N0")₫</td>
                                 </tr>
                             </tfoot>

@@ -7,9 +7,8 @@
     var unreadCount = 0;
     
     var userIdString = HttpContextAccessor.HttpContext?.Session.GetString("UserId");
-    if (!string.IsNullOrEmpty(userIdString))
+    if (!string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out var userId))
     {
-        var userId = int.Parse(userIdString);
         notifications = await DbContext.Notifications
             .Where(n => n.UserId == userId)
             .OrderByDescending(n => n.CreatedAt)

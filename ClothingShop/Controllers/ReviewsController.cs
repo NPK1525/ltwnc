@@ -1,42 +1,73 @@
 using Microsoft.AspNetCore.Mvc;
 using ClothingShop.Data;
 using ClothingShop.Models;
+using ClothingShop.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.Text.RegularExpressions;
 
 namespace ClothingShop.Controllers
 {
-    public class ReviewsController : Controller
+    public partial class ReviewsController(ApplicationDbContext context) : Controller
     {
-        private readonly ApplicationDbContext _context;
+        private readonly ApplicationDbContext _context = context;
 
-        public ReviewsController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
+        [GeneratedRegex("<.*?>")]
+        private static partial Regex HtmlTagRegex();
 
         // POST: Thêm đánh giá
         [HttpPost]
+        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Add(int productId, int orderId, int rating, string? comment)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 TempData["Error"] = "Vui lòng đăng nhập để đánh giá";
                 return RedirectToAction("Login", "Account");
             }
 
-            var userId = int.Parse(userIdString);
+            // ✅ VALIDATION
+            if (rating < 1 || rating > 5)
+            {
+                TempData["Error"] = "Đánh giá phải từ 1-5 sao";
+                return RedirectToAction("Details", "Products", new { id = productId });
+            }
 
-            // Kiểm tra xem user đã mua sản phẩm này chưa
+            if (!string.IsNullOrEmpty(comment) && comment.Length > 1000)
+            {
+                TempData["Error"] = "Nhận xét không được quá 1000 ký tự";
+                return RedirectToAction("Details", "Products", new { id = productId });
+            }
+
+            // ✅ XSS PROTECTION - Remove HTML tags
+            if (!string.IsNullOrEmpty(comment))
+            {
+                comment = HtmlTagRegex().Replace(comment, string.Empty);
+                comment = comment.Trim();
+            }
+
+            // Kiểm tra xem đơn hàng cụ thể (orderId) có tồn tại, thuộc về user này, đã giao và chứa sản phẩm này hay không
             var hasPurchased = await _context.OrderItems
                 .AnyAsync(oi => oi.ProductId == productId &&
-                               _context.Orders.Any(o => o.Id == oi.OrderId && 
-                                                       o.UserId == userId && 
-                                                       o.Status == "Đã giao"));
+                               oi.OrderId == orderId &&
+                               oi.Order.UserId == userId &&
+                               oi.Order.Status == OrderStatus.Delivered.ToVietnamese());
 
             if (!hasPurchased)
             {
-                TempData["Error"] = "Bạn chỉ có thể đánh giá sản phẩm đã mua";
+                TempData["Error"] = "Đơn hàng không hợp lệ hoặc bạn chưa mua sản phẩm này.";
+                return RedirectToAction("Details", "Products", new { id = productId });
+            }
+
+            // Kiểm tra xem user đã đánh giá sản phẩm này cho đơn hàng này chưa (tránh đánh giá trùng lặp)
+            var hasReviewed = await _context.ProductReviews
+                .AnyAsync(r => r.ProductId == productId &&
+                               r.OrderId == orderId &&
+                               r.UserId == userId);
+
+            if (hasReviewed)
+            {
+                TempData["Error"] = "Bạn đã đánh giá sản phẩm này cho đơn hàng này rồi.";
                 return RedirectToAction("Details", "Products", new { id = productId });
             }
 

@@ -182,7 +182,7 @@
                         <tbody>
                             @{
                                 int rank = 1;
-                                foreach (var item in ViewBag.BestSellers)
+                                foreach (var item in (IEnumerable<ClothingShop.Controllers.Admin.ReportsController.BestSellerDto>)ViewBag.BestSellers)
                                 {
                                     var margin = item.TotalRevenue > 0 ? (item.TotalProfit / item.TotalRevenue * 100) : 0;
                                     <tr>
@@ -213,11 +213,11 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
         @{
-            var dailyFinancial = (IEnumerable<dynamic>)ViewBag.DailyFinancial;
-            var labels = dailyFinancial.Select(x => ((DateTime)x.Date).ToString("dd/MM")).ToList();
-            var revenues = dailyFinancial.Select(x => (decimal)x.Revenue).ToList();
-            var costs = dailyFinancial.Select(x => (decimal)x.Cost).ToList();
-            var profits = dailyFinancial.Select(x => (decimal)x.Profit).ToList();
+            var dailyFinancial = (IEnumerable<ClothingShop.Controllers.Admin.ReportsController.DailyFinancialDto>)ViewBag.DailyFinancial;
+            var labels = dailyFinancial.Select(x => x.Date.ToString("dd/MM")).ToList();
+            var revenues = dailyFinancial.Select(x => x.Revenue).ToList();
+            var costs = dailyFinancial.Select(x => x.Cost).ToList();
+            var profits = dailyFinancial.Select(x => x.Profit).ToList();
         }
         
         // Biểu đồ tài chính

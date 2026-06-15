@@ -1,0 +1,172 @@
+@model ClothingShop.Models.Voucher
+@using ClothingShop.Models.Enums
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+    ViewData["Title"] = "Thêm mới Voucher";
+}
+
+<div class="row mb-3">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/Admin">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/Admin/Vouchers">Quản lý Voucher</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Thêm mới</li>
+            </ol>
+        </nav>
+        <h4 class="fw-bold"><i class="fas fa-plus text-primary me-2"></i>Thêm mới Mã giảm giá</h4>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4">
+                <form action="/Admin/Vouchers/Create" method="post">
+                    @Html.AntiForgeryToken()
+                    
+                    <div class="row g-3">
+                        <!-- Code -->
+                        <div class="col-md-6">
+                            <label asp-for="Code" class="form-label fw-bold small">Mã giảm giá <span class="text-danger">*</span></label>
+                            <input asp-for="Code" class="form-control text-uppercase font-monospace border-2" placeholder="Ví dụ: SUMMER50K" required />
+                            <span asp-validation-for="Code" class="text-danger small"></span>
+                            <div class="form-text text-muted small">Viết liền, không dấu, viết hoa (A-Z, 0-9)</div>
+                        </div>
+
+                        <!-- Trạng thái hoạt động ban đầu -->
+                        <div class="col-md-6 d-flex align-items-center mt-md-4">
+                            <div class="form-check form-switch p-3 border rounded bg-light w-100 ps-5 ms-0 mt-2">
+                                <input asp-for="IsActive" class="form-check-input" type="checkbox" checked />
+                                <label asp-for="IsActive" class="form-check-label fw-bold small">Kích hoạt mã ngay lập tức</label>
+                            </div>
+                        </div>
+
+                        <!-- Mô tả -->
+                        <div class="col-12">
+                            <label asp-for="Description" class="form-label fw-bold small">Mô tả chương trình khuyến mãi</label>
+                            <textarea asp-for="Description" class="form-control border-2" rows="2" placeholder="Nhập mô tả hiển thị cho khách hàng biết (Ví dụ: Giảm 20% đơn từ 200k)"></textarea>
+                            <span asp-validation-for="Description" class="text-danger small"></span>
+                        </div>
+
+                        <hr class="my-4 text-muted">
+
+                        <!-- Loại và giá trị giảm -->
+                        <div class="col-md-6">
+                            <label asp-for="DiscountType" class="form-label fw-bold small">Loại giảm giá</label>
+                            <select asp-for="DiscountType" id="discountTypeSelect" class="form-select border-2">
+                                <option value="Percentage">Giảm theo phần trăm (%)</option>
+                                <option value="FixedAmount">Giảm theo số tiền (đ)</option>
+                            </select>
+                            <span asp-validation-for="DiscountType" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="DiscountValue" class="form-label fw-bold small">Giá trị giảm giá <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input asp-for="DiscountValue" type="number" step="any" class="form-control border-2" placeholder="Nhập số tiền hoặc số %" required />
+                                <span class="input-group-text bg-light border-2 border-start-0" id="discountValueAddon">%</span>
+                            </div>
+                            <span asp-validation-for="DiscountValue" class="text-danger small"></span>
+                        </div>
+
+                        <!-- Capped max amount for percentage type -->
+                        <div class="col-md-6" id="maxDiscountRow">
+                            <label asp-for="MaxDiscountAmount" class="form-label fw-bold small">Số tiền giảm tối đa (Tùy chọn)</label>
+                            <div class="input-group">
+                                <input asp-for="MaxDiscountAmount" type="number" step="0.01" class="form-control border-2" placeholder="Nhập số tiền giảm tối đa" />
+                                <span class="input-group-text bg-light border-2 border-start-0">₫</span>
+                            </div>
+                            <span asp-validation-for="MaxDiscountAmount" class="text-danger small"></span>
+                            <div class="form-text text-muted small">Bỏ trống nếu không giới hạn tiền giảm</div>
+                        </div>
+
+                        <!-- Min Order Amount -->
+                        <div class="col-md-6">
+                            <label asp-for="MinOrderAmount" class="form-label fw-bold small">Giá trị đơn hàng tối thiểu <span class="text-danger">*</span></label>
+                            <div class="input-group">
+                                <input asp-for="MinOrderAmount" type="number" step="0.01" class="form-control border-2" placeholder="Ví dụ: 150000" required />
+                                <span class="input-group-text bg-light border-2 border-start-0">₫</span>
+                            </div>
+                            <span asp-validation-for="MinOrderAmount" class="text-danger small"></span>
+                        </div>
+
+                        <hr class="my-4 text-muted">
+
+                        <!-- Start and End dates -->
+                        <div class="col-md-6">
+                            <label asp-for="StartDate" class="form-label fw-bold small">Ngày bắt đầu hiệu lực <span class="text-danger">*</span></label>
+                            <input asp-for="StartDate" type="datetime-local" class="form-control border-2" required />
+                            <span asp-validation-for="StartDate" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="EndDate" class="form-label fw-bold small">Ngày hết hạn hiệu lực <span class="text-danger">*</span></label>
+                            <input asp-for="EndDate" type="datetime-local" class="form-control border-2" required />
+                            <span asp-validation-for="EndDate" class="text-danger small"></span>
+                        </div>
+
+                        <!-- UsageLimit and LimitPerUser -->
+                        <div class="col-md-6">
+                            <label asp-for="UsageLimit" class="form-label fw-bold small">Tổng số lượt sử dụng tối đa</label>
+                            <input asp-for="UsageLimit" type="number" class="form-control border-2" placeholder="Bỏ trống nếu không giới hạn số lần dùng" />
+                            <span asp-validation-for="UsageLimit" class="text-danger small"></span>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label asp-for="LimitPerUser" class="form-label fw-bold small">Số lượt dùng tối đa trên mỗi khách hàng <span class="text-danger">*</span></label>
+                            <input asp-for="LimitPerUser" type="number" class="form-control border-2" required />
+                            <span asp-validation-for="LimitPerUser" class="text-danger small"></span>
+                            <div class="form-text text-muted small">Thường đặt là 1 (mỗi khách hàng chỉ dùng 1 lần)</div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 pt-3 border-top d-flex gap-2">
+                        <button type="submit" class="btn btn-primary px-4 py-2"><i class="fas fa-save me-2"></i>Tạo mã Voucher</button>
+                        <a href="/Admin/Vouchers" class="btn btn-outline-secondary px-4 py-2"><i class="fas fa-arrow-left me-2"></i>Quay lại</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-lg-4 mt-4 mt-lg-0">
+        <div class="card bg-light border-0 shadow-sm">
+            <div class="card-body p-4">
+                <h6 class="fw-bold mb-3"><i class="fas fa-info-circle text-primary me-2"></i>Lưu ý cấu hình:</h6>
+                <ul class="small ps-3 mb-0 text-muted">
+                    <li class="mb-2"><strong>Mã Voucher:</strong> Tránh các ký tự đặc biệt, viết hoa toàn bộ để khách hàng dễ nhập ở giao diện checkout.</li>
+                    <li class="mb-2"><strong>Giảm giá theo %:</strong> Ví dụ nhập 20 là giảm 20%. Nên điền thêm <em>Số tiền giảm tối đa</em> để tránh thất thoát khi đơn hàng có giá trị quá lớn.</li>
+                    <li class="mb-2"><strong>Giảm giá theo số tiền:</strong> Ví dụ nhập 50000 là giảm 50.000đ trực tiếp vào đơn hàng.</li>
+                    <li class="mb-2"><strong>Thời hạn:</strong> Thời gian bắt đầu và kết thúc có hiệu lực tính chính xác đến từng phút theo cài đặt.</li>
+                    <li><strong>Giới hạn của mỗi user:</strong> Dùng bảng Usage History để đối chiếu email/userId khi khách đặt hàng.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const select = document.getElementById('discountTypeSelect');
+            const addon = document.getElementById('discountValueAddon');
+            const maxRow = document.getElementById('maxDiscountRow');
+            const maxInput = document.querySelector('input[name="MaxDiscountAmount"]');
+
+            function toggleType() {
+                if (select.value === 'Percentage') {
+                    addon.textContent = '%';
+                    maxRow.style.display = 'block';
+                } else {
+                    addon.textContent = '₫';
+                    maxRow.style.display = 'none';
+                    maxInput.value = '';
+                }
+            }
+
+            select.addEventListener('change', toggleType);
+            toggleType(); // run on load
+        });
+    </script>
+}

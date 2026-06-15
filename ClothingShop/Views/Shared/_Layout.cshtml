@@ -1,4 +1,4 @@
-﻿@inject IHttpContextAccessor HttpContextAccessor
+@inject IHttpContextAccessor HttpContextAccessor
 @inject ClothingShop.Services.ICartService CartService
 @{
     var cartCount = 0;
@@ -73,13 +73,17 @@
                 <!-- Right side icons -->
                 <div class="d-flex align-items-center gap-3">
                     
-                    @if (HttpContextAccessor.HttpContext?.Session.GetString("UserId") != null)
+                    @{
+                        var userIdString = HttpContextAccessor.HttpContext?.Session.GetString("UserId");
+                        int userId = 0;
+                        var isUserIdParsed = !string.IsNullOrEmpty(userIdString) && int.TryParse(userIdString, out userId);
+                    }
+                    @if (isUserIdParsed)
                     {
                         <!-- Notification Bell -->
                         <button class="btn btn-link text-white p-0 position-relative" type="button" data-bs-toggle="offcanvas" data-bs-target="#notificationOffcanvas">
                             <i class="fas fa-bell fs-5"></i>
                             @{
-                                var userId = int.Parse(HttpContextAccessor.HttpContext.Session.GetString("UserId")!);
                                 var unreadCount = Context.RequestServices.GetRequiredService<ClothingShop.Data.ApplicationDbContext>()
                                     .Notifications.Count(n => n.UserId == userId && !n.IsRead);
                             }
@@ -274,16 +278,16 @@
                     <h6 class="text-white-50 mb-2 small">PHƯƠNG THỨC THANH TOÁN</h6>
                     <div class="d-flex gap-2 align-items-center flex-wrap">
                         <div class="bg-white rounded p-2" style="height: 35px; display: flex; align-items: center;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/4/41/Visa_Logo.png" alt="Visa" style="height: 20px;">
+                            <img src="~/images/visa.svg" asp-append-version="true" alt="Visa" style="height: 20px;">
                         </div>
                         <div class="bg-white rounded p-2" style="height: 35px; display: flex; align-items: center;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/2/2a/Mastercard-logo.svg" alt="Mastercard" style="height: 20px;">
+                            <img src="~/images/mastercard.svg" asp-append-version="true" alt="Mastercard" style="height: 20px;">
                         </div>
                         <div class="bg-white rounded p-2" style="height: 35px; display: flex; align-items: center;">
-                            <img src="https://upload.wikimedia.org/wikipedia/commons/b/b5/PayPal.svg" alt="PayPal" style="height: 20px;">
+                            <img src="~/images/paypal.svg" asp-append-version="true" alt="PayPal" style="height: 20px;">
                         </div>
-                        <div class="bg-danger rounded p-2 text-white fw-bold" style="height: 35px; display: flex; align-items: center; padding: 0 10px !important;">
-                            MoMo
+                        <div class="bg-white rounded p-2" style="height: 35px; display: flex; align-items: center;">
+                            <img src="~/images/momo.svg" asp-append-version="true" alt="MoMo" style="height: 20px;">
                         </div>
                     </div>
                 </div>
@@ -338,7 +342,6 @@
         
         /* Sticky Footer - Đảm bảo footer luôn ở dưới cùng */
         html, body {
-            height: 100%;
             margin: 0;
             padding: 0;
         }

@@ -3,6 +3,7 @@ using ClothingShop.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ClothingShop.Common;
 
 namespace ClothingShop.Controllers.Admin
 {
@@ -49,7 +50,7 @@ namespace ClothingShop.Controllers.Admin
 
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            
+
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalItems = totalItems;
@@ -86,8 +87,8 @@ namespace ClothingShop.Controllers.Admin
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Reply(int ticketId, string message)
         {
-            var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            var userIdString = HttpContext.Session.GetString(Constants.SessionKeys.UserId);
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var adminId))
             {
                 return RedirectToAction("Login", "Account");
             }
@@ -103,8 +104,6 @@ namespace ClothingShop.Controllers.Admin
             {
                 return NotFound();
             }
-
-            var adminId = int.Parse(userIdString);
             var newMessage = new SupportMessage
             {
                 TicketId = ticketId,
@@ -115,7 +114,7 @@ namespace ClothingShop.Controllers.Admin
             };
 
             _context.SupportMessages.Add(newMessage);
-            
+
             // Cập nhật trạng thái ticket
             if (ticket.Status == "Mở")
             {

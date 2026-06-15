@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using ClothingShop.Data;
+using ClothingShop.Models.Enums;
 using Microsoft.EntityFrameworkCore;
 using OfficeOpenXml;
 using iTextSharp.text;
@@ -22,7 +23,7 @@ namespace ClothingShop.Controllers.Admin
         }
 
         // ==================== BÁO CÁO NÂNG CAO ====================
-        
+
         // GET: /Admin/Reports/AdvancedStatistics
         [HttpGet("AdvancedStatistics")]
         public async Task<IActionResult> AdvancedStatistics(string period = "month", int? year = null, int? month = null, int? quarter = null)
@@ -69,9 +70,9 @@ namespace ClothingShop.Controllers.Admin
 
             // Tính doanh số, chi phí, lợi nhuận từ OrderItems
             var financialData = await _context.OrderItems
-                .Where(oi => oi.Order.OrderDate >= startDate && 
-                            oi.Order.OrderDate <= endDate && 
-                            oi.Order.Status == "Đã giao")
+                .Where(oi => oi.Order.OrderDate >= startDate &&
+                            oi.Order.OrderDate <= endDate &&
+                            oi.Order.Status == OrderStatus.Delivered.ToVietnamese())
                 .GroupBy(oi => 1)
                 .Select(g => new
                 {
@@ -86,26 +87,26 @@ namespace ClothingShop.Controllers.Admin
             ViewBag.TotalRevenue = financialData?.TotalRevenue ?? 0;
             ViewBag.TotalCost = financialData?.TotalCost ?? 0;
             ViewBag.TotalProfit = ViewBag.TotalRevenue - ViewBag.TotalCost;
-            ViewBag.ProfitMargin = ViewBag.TotalRevenue > 0 
-                ? (ViewBag.TotalProfit / ViewBag.TotalRevenue * 100) 
+            ViewBag.ProfitMargin = ViewBag.TotalRevenue > 0
+                ? (ViewBag.TotalProfit / ViewBag.TotalRevenue * 100)
                 : 0;
-            ViewBag.PendingOrders = orders.Count(o => o.Status == "Chờ xác nhận");
-            ViewBag.CompletedOrders = orders.Count(o => o.Status == "Đã giao");
-            ViewBag.CancelledOrders = orders.Count(o => o.Status == "Đã hủy");
-            ViewBag.AverageOrderValue = ViewBag.CompletedOrders > 0 
-                ? ViewBag.TotalRevenue / ViewBag.CompletedOrders 
+            ViewBag.PendingOrders = orders.Count(o => o.Status == OrderStatus.Pending.ToVietnamese());
+            ViewBag.CompletedOrders = orders.Count(o => o.Status == OrderStatus.Delivered.ToVietnamese());
+            ViewBag.CancelledOrders = orders.Count(o => o.Status == OrderStatus.Cancelled.ToVietnamese());
+            ViewBag.AverageOrderValue = ViewBag.CompletedOrders > 0
+                ? ViewBag.TotalRevenue / ViewBag.CompletedOrders
                 : 0;
 
             // Sản phẩm bán chạy (7 ngày gần nhất, theo số lượng)
             var last7Days = DateTime.Now.AddDays(-7);
             var bestSellers = await _context.OrderItems
-                .Where(oi => oi.Order.OrderDate >= last7Days && 
-                            oi.Order.Status == "Đã giao")
+                .Where(oi => oi.Order.OrderDate >= last7Days &&
+                            oi.Order.Status == OrderStatus.Delivered.ToVietnamese())
                 .GroupBy(oi => new { oi.ProductId, oi.ProductName })
-                .Select(g => new
+                .Select(g => new BestSellerDto
                 {
-                    g.Key.ProductId,
-                    g.Key.ProductName,
+                    ProductId = g.Key.ProductId,
+                    ProductName = g.Key.ProductName,
                     TotalQuantity = g.Sum(oi => oi.Quantity),
                     TotalRevenue = g.Sum(oi => oi.Quantity * oi.Price),
                     TotalCost = g.Sum(oi => oi.Quantity * (oi.Cost ?? 0)),
@@ -119,11 +120,11 @@ namespace ClothingShop.Controllers.Admin
 
             // Doanh thu, chi phí, lợi nhuận theo ngày (cho biểu đồ)
             var dailyFinancial = await _context.OrderItems
-                .Where(oi => oi.Order.OrderDate >= startDate && 
-                            oi.Order.OrderDate <= endDate && 
-                            oi.Order.Status == "Đã giao")
+                .Where(oi => oi.Order.OrderDate >= startDate &&
+                            oi.Order.OrderDate <= endDate &&
+                            oi.Order.Status == OrderStatus.Delivered.ToVietnamese())
                 .GroupBy(oi => oi.Order.OrderDate.Date)
-                .Select(g => new
+                .Select(g => new DailyFinancialDto
                 {
                     Date = g.Key,
                     Revenue = g.Sum(oi => oi.Quantity * oi.Price),
@@ -138,8 +139,8 @@ namespace ClothingShop.Controllers.Admin
 
             // === DOANH THU THEO DANH MỤC (7 ngày gần nhất) ===
             var revenueByCategory = await _context.OrderItems
-                .Where(oi => oi.Order.OrderDate >= last7Days && 
-                            oi.Order.Status == "Đã giao")
+                .Where(oi => oi.Order.OrderDate >= last7Days &&
+                            oi.Order.Status == OrderStatus.Delivered.ToVietnamese())
                 .Join(_context.Products, oi => oi.ProductId, p => p.Id, (oi, p) => new { oi, p.Category })
                 .GroupBy(x => x.Category)
                 .Select(g => new
@@ -173,7 +174,7 @@ namespace ClothingShop.Controllers.Admin
         }
 
         // ==================== EXPORT EXCEL ====================
-        
+
         // GET: /Admin/Reports/ExportRevenueExcel
         [HttpGet("ExportRevenueExcel")]
         public async Task<IActionResult> ExportRevenueExcel(DateTime? startDate, DateTime? endDate)
@@ -184,7 +185,7 @@ namespace ClothingShop.Controllers.Admin
             var orders = await _context.Orders
                 .Include(o => o.User)
                 .Include(o => o.Items)
-                .Where(o => o.OrderDate >= startDate && o.OrderDate <= endDate && o.Status == "Đã giao")
+                .Where(o => o.OrderDate >= startDate && o.OrderDate <= endDate && o.Status == OrderStatus.Delivered.ToVietnamese())
                 .OrderByDescending(o => o.OrderDate)
                 .ToListAsync();
 
@@ -221,14 +222,14 @@ namespace ClothingShop.Controllers.Admin
             // Data
             int row = 5;
             decimal totalRevenue = 0, totalCost = 0, totalProfit = 0;
-            
+
             foreach (var order in orders)
             {
                 var revenue = order.Items.Sum(i => i.Quantity * i.Price);
                 var cost = order.Items.Sum(i => i.Quantity * (i.Cost ?? 0));
                 var profit = revenue - cost;
                 var margin = revenue > 0 ? (profit / revenue * 100) : 0;
-                
+
                 worksheet.Cells[row, 1].Value = $"#{order.Id:D6}";
                 worksheet.Cells[row, 2].Value = order.OrderDate.ToString("dd/MM/yyyy HH:mm");
                 worksheet.Cells[row, 3].Value = order.User?.FullName ?? "N/A";
@@ -243,7 +244,7 @@ namespace ClothingShop.Controllers.Admin
                 worksheet.Cells[row, 9].Value = margin;
                 worksheet.Cells[row, 9].Style.Numberformat.Format = "0.0%";
                 worksheet.Cells[row, 10].Value = order.Status;
-                
+
                 totalRevenue += revenue;
                 totalCost += cost;
                 totalProfit += profit;
@@ -358,8 +359,8 @@ namespace ClothingShop.Controllers.Admin
             var endDate = DateTime.Now;
 
             var bestSellers = await _context.OrderItems
-                .Where(oi => oi.Order.OrderDate >= last7Days && 
-                            oi.Order.Status == "Đã giao")
+                .Where(oi => oi.Order.OrderDate >= last7Days &&
+                            oi.Order.Status == OrderStatus.Delivered.ToVietnamese())
                 .GroupBy(oi => new { oi.ProductId, oi.ProductName })
                 .Select(g => new
                 {
@@ -408,7 +409,7 @@ namespace ClothingShop.Controllers.Admin
             foreach (var item in bestSellers)
             {
                 var margin = item.TotalRevenue > 0 ? (item.TotalProfit / item.TotalRevenue * 100) : 0;
-                
+
                 worksheet.Cells[row, 1].Value = rank++;
                 worksheet.Cells[row, 2].Value = item.ProductId;
                 worksheet.Cells[row, 3].Value = item.ProductName;
@@ -435,7 +436,7 @@ namespace ClothingShop.Controllers.Admin
         }
 
         // ==================== EXPORT PDF ====================
-        
+
         // GET: /Admin/Reports/ExportRevenuePdf
         [HttpGet("ExportRevenuePdf")]
         public async Task<IActionResult> ExportRevenuePdf(DateTime? startDate, DateTime? endDate)
@@ -446,7 +447,7 @@ namespace ClothingShop.Controllers.Admin
             var orders = await _context.Orders
                 .Include(o => o.User)
                 .Include(o => o.Items)
-                .Where(o => o.OrderDate >= startDate && o.OrderDate <= endDate && o.Status == "Đã giao")
+                .Where(o => o.OrderDate >= startDate && o.OrderDate <= endDate && o.Status == OrderStatus.Delivered.ToVietnamese())
                 .OrderByDescending(o => o.OrderDate)
                 .ToListAsync();
 
@@ -492,14 +493,14 @@ namespace ClothingShop.Controllers.Admin
 
             // Data
             decimal totalRevenue = 0, totalCost = 0, totalProfit = 0;
-            
+
             foreach (var order in orders)
             {
                 var revenue = order.Items.Sum(i => i.Quantity * i.Price);
                 var cost = order.Items.Sum(i => i.Quantity * (i.Cost ?? 0));
                 var profit = revenue - cost;
                 var margin = revenue > 0 ? (profit / revenue * 100) : 0;
-                
+
                 AddCell(table, $"#{order.Id:D6}", normalFont, Element.ALIGN_CENTER);
                 AddCell(table, order.OrderDate.ToString("dd/MM/yyyy"), normalFont, Element.ALIGN_CENTER);
                 AddCell(table, order.User?.FullName ?? "N/A", normalFont, Element.ALIGN_LEFT);
@@ -509,7 +510,7 @@ namespace ClothingShop.Controllers.Admin
                 AddCell(table, $"{cost:N0}₫", normalFont, Element.ALIGN_RIGHT);
                 AddCell(table, $"{profit:N0}₫", normalFont, Element.ALIGN_RIGHT);
                 AddCell(table, $"{margin:N1}%", normalFont, Element.ALIGN_RIGHT);
-                
+
                 totalRevenue += revenue;
                 totalCost += cost;
                 totalProfit += profit;
@@ -543,6 +544,25 @@ namespace ClothingShop.Controllers.Admin
                 Padding = 5
             };
             table.AddCell(cell);
+        }
+
+        public class DailyFinancialDto
+        {
+            public DateTime Date { get; set; }
+            public decimal Revenue { get; set; }
+            public decimal Cost { get; set; }
+            public decimal Profit { get; set; }
+            public int OrderCount { get; set; }
+        }
+
+        public class BestSellerDto
+        {
+            public int ProductId { get; set; }
+            public string ProductName { get; set; } = null!;
+            public int TotalQuantity { get; set; }
+            public decimal TotalRevenue { get; set; }
+            public decimal TotalCost { get; set; }
+            public decimal TotalProfit { get; set; }
         }
     }
 }

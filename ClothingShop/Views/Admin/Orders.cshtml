@@ -29,6 +29,7 @@
                     <label class="form-label small fw-bold">Trạng thái</label>
                     <select name="status" class="form-select" onchange="this.form.submit()">
                         <option value="">Tất cả</option>
+                        <option value="Chờ thanh toán" selected="@(ViewBag.Status == "Chờ thanh toán")">Chờ thanh toán</option>
                         <option value="Chờ xác nhận" selected="@(ViewBag.Status == "Chờ xác nhận")">Chờ xác nhận</option>
                         <option value="Chờ lấy hàng" selected="@(ViewBag.Status == "Chờ lấy hàng")">Chờ lấy hàng</option>
                         <option value="Chờ giao hàng" selected="@(ViewBag.Status == "Chờ giao hàng")">Chờ giao hàng</option>
@@ -145,6 +146,7 @@
                                         @{
                                             var badgeClass = order.Status switch
                                             {
+                                                "Chờ thanh toán" => "bg-secondary text-white",
                                                 "Chờ xác nhận" => "bg-warning text-dark",
                                                 "Chờ lấy hàng" => "bg-info",
                                                 "Chờ giao hàng" => "bg-primary",

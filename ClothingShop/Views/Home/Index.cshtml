@@ -1,6 +1,8 @@
 @{
     ViewData["Title"] = "Trang chủ";
     var bestSellingProducts = ViewBag.BestSellingProducts as List<ClothingShop.Models.Product> ?? new List<ClothingShop.Models.Product>();
+    var newArrivals = ViewBag.NewArrivals as List<ClothingShop.Models.Product> ?? new List<ClothingShop.Models.Product>();
+    var featuredCategories = ViewBag.FeaturedCategories as List<ClothingShop.Models.ProductCategory> ?? new List<ClothingShop.Models.ProductCategory>();
 }
 
 <!-- HERO BANNER WITH TEXT OVERLAY -->
@@ -17,6 +19,52 @@
         </div>
     </div>
 </section>
+
+<!-- DANH MỤC NỔI BẬT (INFINITE SCROLL CAROUSEL) -->
+@if (featuredCategories.Count > 0)
+{
+    <section class="container-fluid px-0 mb-5">
+        <div class="container">
+            <div class="mb-4">
+                <h2 class="fw-bold text-uppercase" style="font-size: 1.5rem; letter-spacing: 1px;">
+                    <i class="fas fa-th-large text-primary me-2"></i>Danh mục nổi bật
+                </h2>
+                <p class="text-muted">Bộ sưu tập thời trang thịnh hành nhất</p>
+            </div>
+        </div>
+        
+        <div class="featured-carousel position-relative">
+            <button class="featured-btn featured-btn-prev" onclick="scrollFeatured(-1)">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            
+            <div class="featured-track" id="featuredTrack">
+                @foreach (var cat in featuredCategories)
+                {
+                    var imageUrl = !string.IsNullOrEmpty(cat.BannerImageUrl) 
+                        ? cat.BannerImageUrl 
+                        : (cat.Name.Contains("Nam") ? "https://images.unsplash.com/photo-1505022610485-0249ba5b3675?q=80&w=600&auto=format&fit=crop" 
+                           : (cat.Name.Contains("Nữ") ? "https://images.unsplash.com/photo-1581044777550-4cfa60707c03?q=80&w=600&auto=format&fit=crop" 
+                              : "https://images.unsplash.com/photo-1523381210434-271e8be1f52b?q=80&w=600&auto=format&fit=crop"));
+                    
+                    <div class="featured-item">
+                        <a href="@(string.IsNullOrEmpty(cat.LinkUrl) ? Url.Action("Index", "Products", new { category = cat.Name }) : cat.LinkUrl)" class="featured-card">
+                            <img src="@imageUrl" alt="@cat.Name">
+                            <div class="featured-overlay text-white">
+                                <h4 class="fw-bold text-uppercase mb-1" style="letter-spacing: 1px;">@cat.Name</h4>
+                                <p class="mb-0 small text-white-50 text-uppercase" style="letter-spacing: 1px;">Khám phá ngay →</p>
+                            </div>
+                        </a>
+                    </div>
+                }
+            </div>
+            
+            <button class="featured-btn featured-btn-next" onclick="scrollFeatured(1)">
+                <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </section>
+}
 
 <!-- SẢN PHẨM BÁN CHẠY -->
 @if (bestSellingProducts.Count > 0)
@@ -65,12 +113,56 @@
                 <i class="fas fa-chevron-right"></i>
             </button>
         </div>
+    </section>
+}
+
+<!-- SẢN PHẨM MỚI NHẤT -->
+@if (newArrivals.Count > 0)
+{
+    <section class="container-fluid px-0 mb-5">
+        <div class="container">
+            <div class="mb-4">
+                <h2 class="fw-bold text-uppercase" style="font-size: 1.5rem; letter-spacing: 1px;">
+                    <i class="fas fa-magic text-warning me-2"></i>Sản phẩm mới nhất
+                </h2>
+                <p class="text-muted">Đón đầu xu hướng thời trang hiện đại</p>
+            </div>
+        </div>
         
-        <div class="container text-center mt-4">
-            <a asp-controller="Products" asp-action="Index" class="btn btn-dark btn-lg px-5">Xem tất cả sản phẩm</a>
+        <div class="product-carousel position-relative">
+            <button class="product-btn product-btn-prev" onclick="scrollNewArrivals(-1)">
+                <i class="fas fa-chevron-left"></i>
+            </button>
+            
+            <div class="product-track" id="newArrivalsTrack">
+                @foreach (var p in newArrivals)
+                {
+                    <div class="product-item">
+                        <a asp-controller="Products" asp-action="Details" asp-route-id="@p.Id" class="product-link">
+                            <div class="product-image-wrapper position-relative">
+                                <span class="badge bg-danger position-absolute top-0 start-0 m-2" style="z-index: 5;">NEW</span>
+                                <img src="@p.ImageUrl" alt="@p.Name" class="product-image">
+                            </div>
+                            <div class="product-info text-center mt-3">
+                                <h6 class="product-name fw-bold mb-2">@p.Name</h6>
+                                <p class="product-category text-muted small mb-1">@p.Category - @p.Gender</p>
+                                <p class="product-price text-danger fw-bold mb-0">@(p.Price.ToString("#,##0"))₫</p>
+                            </div>
+                        </a>
+                    </div>
+                }
+            </div>
+            
+            <button class="product-btn product-btn-next" onclick="scrollNewArrivals(1)">
+                <i class="fas fa-chevron-right"></i>
+            </button>
         </div>
     </section>
 }
+
+<div class="container text-center mt-4 mb-5">
+    <a asp-controller="Products" asp-action="Index" class="btn btn-dark btn-lg px-5" style="border-radius:0;">Xem tất cả sản phẩm</a>
+</div>
 
 <style>
     /* HERO SECTION */
@@ -218,12 +310,21 @@
         border: none;
         cursor: pointer;
         z-index: 10;
-        transition: all 0.3s ease;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .featured-carousel:hover .featured-btn {
+        opacity: 1;
+        visibility: visible;
     }
 
     .featured-btn:hover {
         background: #333;
-        transform: translateY(-50%) scale(1.1);
+        transform: translateY(-50%) scale(1.1) !important;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
 
     .featured-btn-prev {
@@ -375,12 +476,21 @@
         border: none;
         cursor: pointer;
         z-index: 10;
-        transition: all 0.3s ease;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .product-carousel:hover .product-btn {
+        opacity: 1;
+        visibility: visible;
     }
 
     .product-btn:hover {
         background: #333;
-        transform: translateY(-50%) scale(1.1);
+        transform: translateY(-50%) scale(1.1) !important;
+        opacity: 1 !important;
+        visibility: visible !important;
     }
 
     .product-btn-prev {
@@ -511,6 +621,16 @@
     // Product carousel - chỉ có nút điều khiển, không auto scroll
     function scrollProducts(direction) {
         const track = document.getElementById('productTrack');
+        const scrollAmount = track.offsetWidth * 0.8;
+        track.scrollBy({
+            left: direction * scrollAmount,
+            behavior: 'smooth'
+        });
+    }
+
+    // New Arrivals carousel - chỉ có nút điều khiển, không auto scroll
+    function scrollNewArrivals(direction) {
+        const track = document.getElementById('newArrivalsTrack');
         const scrollAmount = track.offsetWidth * 0.8;
         track.scrollBy({
             left: direction * scrollAmount,

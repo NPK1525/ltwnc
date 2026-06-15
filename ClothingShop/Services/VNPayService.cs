@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
@@ -7,7 +6,7 @@ namespace ClothingShop.Services;
 
 public interface IVNPayService
 {
-    string CreatePaymentUrl(int orderId, decimal amount, string orderInfo, string ipAddress);
+    string CreatePaymentUrl(string txnRef, decimal amount, string orderInfo, string ipAddress, string returnUrl);
     bool ValidateSignature(IQueryCollection queryParams, string inputHash);
 }
 
@@ -15,10 +14,11 @@ public class VNPayService(IConfiguration configuration) : IVNPayService
 {
     private readonly IConfiguration _configuration = configuration;
 
-    public string CreatePaymentUrl(int orderId, decimal amount, string orderInfo, string ipAddress)
+    public string CreatePaymentUrl(string txnRef, decimal amount, string orderInfo, string ipAddress, string returnUrl)
     {
         var vnpay = new VNPayLibrary();
-        
+
+        // Thêm các tham số theo đúng thứ tự VNPay yêu cầu
         vnpay.AddRequestData("vnp_Version", _configuration["VNPay:Version"] ?? "2.1.0");
         vnpay.AddRequestData("vnp_Command", _configuration["VNPay:Command"] ?? "pay");
         vnpay.AddRequestData("vnp_TmnCode", _configuration["VNPay:TmnCode"] ?? "");
@@ -29,10 +29,14 @@ public class VNPayService(IConfiguration configuration) : IVNPayService
         vnpay.AddRequestData("vnp_Locale", _configuration["VNPay:Locale"] ?? "vn");
         vnpay.AddRequestData("vnp_OrderInfo", orderInfo);
         vnpay.AddRequestData("vnp_OrderType", "other");
-        vnpay.AddRequestData("vnp_ReturnUrl", _configuration["VNPay:ReturnUrl"] ?? "");
-        vnpay.AddRequestData("vnp_TxnRef", orderId.ToString());
+        vnpay.AddRequestData("vnp_ReturnUrl", returnUrl);
+        vnpay.AddRequestData("vnp_TxnRef", txnRef);
+
+        // Thêm vnp_ExpireDate (thời gian hết hạn thanh toán - 15 phút)
+        vnpay.AddRequestData("vnp_ExpireDate", DateTime.Now.AddMinutes(15).ToString("yyyyMMddHHmmss"));
 
         string paymentUrl = vnpay.CreateRequestUrl(_configuration["VNPay:Url"]!, _configuration["VNPay:HashSecret"]!);
+
         return paymentUrl;
     }
 
@@ -125,7 +129,7 @@ public class VNPayLibrary
         byte[] inputBytes = Encoding.UTF8.GetBytes(inputData);
         using var hmac = new HMACSHA512(keyBytes);
         byte[] hashValue = hmac.ComputeHash(inputBytes);
-        return BitConverter.ToString(hashValue).Replace("-", "").ToLower();
+        return Convert.ToHexStringLower(hashValue);
     }
 }
 

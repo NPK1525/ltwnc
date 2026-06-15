@@ -1,4 +1,5 @@
 using ClothingShop.Data;
+using ClothingShop.Models.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -21,8 +22,8 @@ namespace ClothingShop.Controllers.Admin
             // Tìm kiếm
             if (!string.IsNullOrWhiteSpace(search))
             {
-                query = query.Where(u => u.FullName.Contains(search) || 
-                                        u.Email.Contains(search) || 
+                query = query.Where(u => u.FullName.Contains(search) ||
+                                        u.Email.Contains(search) ||
                                         u.PhoneNumber.Contains(search));
                 ViewBag.Search = search;
             }
@@ -48,7 +49,7 @@ namespace ClothingShop.Controllers.Admin
             // Phân trang
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            
+
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalItems = totalItems;
@@ -67,7 +68,7 @@ namespace ClothingShop.Controllers.Admin
                 {
                     UserId = g.Key,
                     TotalOrders = g.Count(),
-                    TotalSpent = g.Where(o => o.Status == "Đã giao").Sum(o => o.TotalAmount)
+                    TotalSpent = g.Where(o => o.Status == OrderStatus.Delivered.ToVietnamese()).Sum(o => o.TotalAmount)
                 })
                 .ToListAsync();
 
@@ -96,8 +97,8 @@ namespace ClothingShop.Controllers.Admin
 
             ViewBag.Orders = orders;
             ViewBag.TotalOrders = orders.Count;
-            ViewBag.TotalSpent = orders.Where(o => o.Status == "Đã giao").Sum(o => o.TotalAmount);
-            ViewBag.PendingOrders = orders.Count(o => o.Status == "Chờ xác nhận" || o.Status == "Chờ lấy hàng" || o.Status == "Chờ giao hàng");
+            ViewBag.TotalSpent = orders.Where(o => o.Status == OrderStatus.Delivered.ToVietnamese()).Sum(o => o.TotalAmount);
+            ViewBag.PendingOrders = orders.Count(o => o.Status == OrderStatus.Pending.ToVietnamese() || o.Status == OrderStatus.Confirmed.ToVietnamese() || o.Status == OrderStatus.Shipping.ToVietnamese());
 
             return View("~/Views/Admin/CustomerDetails.cshtml", customer);
         }
@@ -200,9 +201,7 @@ namespace ClothingShop.Controllers.Admin
             }
 
             // Hash mật khẩu mới
-            var hashedPassword = Convert.ToBase64String(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(newPassword)));
-            
-            customer.PasswordHash = hashedPassword;
+            customer.PasswordHash = BCrypt.Net.BCrypt.HashPassword(newPassword, workFactor: 12);
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "Đặt lại mật khẩu thành công!";

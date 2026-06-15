@@ -1,4 +1,4 @@
-@model PaymentInfo
+@model ClothingShop.Models.PaymentInfoViewModel
 @{
     ViewData["Title"] = "Cài đặt thanh toán";
 }
@@ -29,9 +29,8 @@
         </div>
     }
 
-    <form asp-action="UpdatePaymentSettings" method="post">
+    <form asp-controller="AdminPayment" asp-action="Update" method="post">
         @Html.AntiForgeryToken()
-        <input type="hidden" asp-for="Id" />
 
         <div class="row g-4">
             <!-- THÔNG TIN NGÂN HÀNG -->
@@ -119,17 +118,6 @@
             </button>
         </div>
     </form>
-
-    <!-- THÔNG TIN CẬP NHẬT -->
-    @if (Model.UpdatedAt != DateTime.MinValue)
-    {
-        <div class="text-center mt-4">
-            <small class="text-muted">
-                <i class="fas fa-clock me-1"></i>
-                Cập nhật lần cuối: @Model.UpdatedAt.ToString("dd/MM/yyyy HH:mm:ss")
-            </small>
-        </div>
-    }
 </div>
 
 @section Scripts {

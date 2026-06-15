@@ -2,11 +2,11 @@
 @{
     ViewData["Title"] = "Sửa sản phẩm";
     Layout = "~/Views/Shared/_AdminLayout.cshtml";
-    
+
     // Parse JSON cho Size và Color
     var sizes = new List<string>();
     var colors = new List<string>();
-    
+
     try
     {
         if (!string.IsNullOrEmpty(Model.Size))
@@ -33,7 +33,7 @@
                     <!-- Giữ nguyên Price và Quantity (không cho phép sửa) -->
                     <input type="hidden" asp-for="Price" />
                     <input type="hidden" asp-for="Quantity" />
-                    
+
                     <div class="row g-3">
                         <!-- Tên sản phẩm -->
                         <div class="col-md-12">
@@ -76,28 +76,30 @@
                         <div class="col-md-12">
                             <label class="form-label">Size <span class="text-danger">*</span></label>
                             <div class="border rounded p-3 bg-light">
-                                @foreach (var size in new[] { "S", "M", "L", "XL", "XXL", "XXXL", "Freesize", "Không có size" })
+                                @foreach (var size in new[] { "S", "M", "L", "XL", "XXL", "XXXL", "Freesize" })
                                 {
                                     <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" name="sizes" value="@size" 
-                                               id="size@size.Replace(" ", "")" checked="@sizes.Contains(size)">
+                                        <input class="form-check-input" type="checkbox" name="sizes" value="@size"
+                                            id="size@size.Replace(" ", "")" checked="@sizes.Contains(size)">
                                         <label class="form-check-label" for="size@size.Replace(" ", "")">@size</label>
                                     </div>
                                 }
                             </div>
                             <input type="hidden" asp-for="Size" id="sizeHidden" />
-                            <small class="text-muted">Chọn "Không có size" cho phụ kiện, nón, balo...</small>
+                            <small class="text-muted">Chọn size phù hợp cho sản phẩm (ví dụ: Freesize cho phụ kiện, nón,
+                                balo...)</small>
                         </div>
 
                         <!-- Màu sắc -->
                         <div class="col-md-12">
                             <label class="form-label">Màu sắc <span class="text-danger">*</span></label>
                             <div class="border rounded p-3 bg-light">
-                                @foreach (var color in new[] { "Đen", "Trắng", "Xám", "Đỏ", "Xanh dương", "Xanh lá", "Vàng", "Hồng", "Nâu" })
+                                @foreach (var color in new[] { "Đen", "Trắng", "Xám", "Đỏ", "Xanh dương", "Xanh lá",
+                                "Vàng", "Hồng", "Nâu" })
                                 {
                                     <div class="form-check form-check-inline">
-                                        <input class="form-check-input" type="checkbox" name="colors" value="@color" 
-                                               id="color@color.Replace(" ", "")" checked="@colors.Contains(color)">
+                                        <input class="form-check-input" type="checkbox" name="colors" value="@color"
+                                            id="color@color.Replace(" ", "")" checked="@colors.Contains(color)">
                                         <label class="form-check-label" for="color@color.Replace(" ", "")">@color</label>
                                     </div>
                                 }
@@ -111,8 +113,8 @@
                             <div class="col-md-12">
                                 <label class="form-label">Ảnh hiện tại</label>
                                 <div>
-                                    <img src="@Model.ImageUrl" alt="@Model.Name" class="img-thumbnail" 
-                                         style="max-width: 200px; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
+                                    <img src="@Model.ImageUrl" alt="@Model.Name" class="img-thumbnail"
+                                        style="max-width: 200px; image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges;">
                                 </div>
                             </div>
                         }
@@ -120,7 +122,8 @@
                         <!-- Ảnh phụ hiện tại -->
                         @if (!string.IsNullOrEmpty(Model.AdditionalImages))
                         {
-                            var additionalImages = System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.AdditionalImages);
+                            var additionalImages =
+                            System.Text.Json.JsonSerializer.Deserialize<List<string>>(Model.AdditionalImages);
                             if (additionalImages != null && additionalImages.Count > 0)
                             {
                                 <div class="col-md-12">
@@ -129,8 +132,8 @@
                                         @foreach (var img in additionalImages)
                                         {
                                             <div class="col-md-2">
-                                                <img src="@img" alt="Additional" class="img-thumbnail" 
-                                                     style="width: 100%; height: 100px; object-fit: cover; image-rendering: auto;">
+                                                <img src="@img" alt="Additional" class="img-thumbnail"
+                                                    style="width: 100%; height: 100px; object-fit: cover; image-rendering: auto;">
                                             </div>
                                         }
                                     </div>
@@ -148,8 +151,10 @@
                         <!-- Upload ảnh phụ mới -->
                         <div class="col-md-12">
                             <label class="form-label">Thay đổi ảnh phụ (tối đa 5 ảnh)</label>
-                            <input type="file" name="additionalImages" class="form-control" accept="image/*,.avif" multiple />
-                            <small class="text-muted">Để trống nếu không muốn thay đổi. Nếu upload mới sẽ thay thế toàn bộ ảnh cũ.</small>
+                            <input type="file" name="additionalImages" class="form-control" accept="image/*,.avif"
+                                multiple />
+                            <small class="text-muted">Để trống nếu không muốn thay đổi. Nếu upload mới sẽ thay thế toàn
+                                bộ ảnh cũ.</small>
                         </div>
 
                         <!-- Nút submit -->
@@ -178,18 +183,8 @@
             // Size
             const sizeCheckboxes = document.querySelectorAll('input[name="sizes"]:checked');
             const sizes = Array.from(sizeCheckboxes).map(cb => cb.value);
-            
-            // Kiểm tra nếu chọn "Không có size" thì bỏ chọn các size khác
-            const sizeNoneCheckbox = document.getElementById('sizeKhôngcósize');
-            if (sizeNoneCheckbox && sizeNoneCheckbox.checked) {
-                // Bỏ check tất cả size khác
-                document.querySelectorAll('input[name="sizes"]').forEach(cb => {
-                    if (cb.id !== 'sizeKhôngcósize') {
-                        cb.checked = false;
-                    }
-                });
-                document.getElementById('sizeHidden').value = JSON.stringify(["Không có size"]);
-            } else if (sizes.length > 0) {
+
+            if (sizes.length > 0) {
                 document.getElementById('sizeHidden').value = JSON.stringify(sizes);
             } else {
                 document.getElementById('sizeHidden').value = '';
@@ -205,31 +200,36 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             const allCheckboxes = document.querySelectorAll('input[name="sizes"], input[name="colors"]');
             allCheckboxes.forEach(cb => {
-                cb.addEventListener('change', function() {
-                    // Nếu click vào "Không có size", bỏ chọn tất cả size khác
-                    if (this.id === 'sizeKhôngcósize' && this.checked) {
-                        document.querySelectorAll('input[name="sizes"]').forEach(checkbox => {
-                            if (checkbox.id !== 'sizeKhôngcósize') {
-                                checkbox.checked = false;
-                            }
-                        });
-                    }
-                    // Nếu click vào size khác, bỏ chọn "Không có size"
-                    else if (this.name === 'sizes' && this.id !== 'sizeKhôngcósize' && this.checked) {
-                        const sizeNone = document.getElementById('sizeKhôngcósize');
-                        if (sizeNone) {
-                            sizeNone.checked = false;
-                        }
-                    }
+                cb.addEventListener('change', function () {
                     updateHiddenFields();
                 });
             });
 
+            // Tự động check "Freesize" khi chọn danh mục phụ kiện
+            const categorySelect = document.querySelector('select[name="Category"]');
+            const sizeFreesizeCheckbox = document.getElementById('sizeFreesize');
+            const noSizeCategories = ['Phụ kiện', 'Nón', 'Balo', 'Túi xách', 'Ví', 'Thắt lưng', 'Mắt kính'];
+
+            if (categorySelect && sizeFreesizeCheckbox) {
+                categorySelect.addEventListener('change', function () {
+                    const category = this.value;
+                    if (noSizeCategories.some(cat => category.includes(cat))) {
+                        // Bỏ check tất cả size khác
+                        document.querySelectorAll('input[name="sizes"]').forEach(cb => {
+                            if (cb.id !== 'sizeFreesize') cb.checked = false;
+                        });
+                        // Check "Freesize"
+                        sizeFreesizeCheckbox.checked = true;
+                        updateHiddenFields();
+                    }
+                });
+            }
+
             // Validate khi submit
-            document.querySelector('form').addEventListener('submit', function(e) {
+            document.querySelector('form').addEventListener('submit', function (e) {
                 const sizeChecked = document.querySelectorAll('input[name="sizes"]:checked').length;
                 const colorChecked = document.querySelectorAll('input[name="colors"]:checked').length;
 

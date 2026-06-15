@@ -73,8 +73,9 @@ ScaffoldingReadMe.txt
 *.ldf
 
 ## Secrets
-appsettings.*.json
 secrets.json
+appsettings.Development.json
+# Keep appsettings.Production.json as template (no real secrets)
 
 ## Local Environment
 .env

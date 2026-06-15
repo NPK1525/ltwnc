@@ -15,11 +15,15 @@ namespace ClothingShop.Services
 
         public async Task SendEmailAsync(string toEmail, string subject, string body)
         {
+            var senderName = _configuration["EmailSettings:SenderName"] ?? "ClothingShop";
+            var senderEmail = _configuration["EmailSettings:SenderEmail"] ?? throw new InvalidOperationException("EmailSettings:SenderEmail is not configured");
+            var smtpServer = _configuration["EmailSettings:SmtpServer"] ?? throw new InvalidOperationException("EmailSettings:SmtpServer is not configured");
+            var smtpPort = int.Parse(_configuration["EmailSettings:Port"] ?? "587");
+            var username = _configuration["EmailSettings:Username"] ?? throw new InvalidOperationException("EmailSettings:Username is not configured");
+            var password = _configuration["EmailSettings:Password"] ?? throw new InvalidOperationException("EmailSettings:Password is not configured");
+
             var email = new MimeMessage();
-            email.From.Add(new MailboxAddress(
-                _configuration["EmailSettings:SenderName"],
-                _configuration["EmailSettings:SenderEmail"]
-            ));
+            email.From.Add(new MailboxAddress(senderName, senderEmail));
             email.To.Add(MailboxAddress.Parse(toEmail));
             email.Subject = subject;
 
@@ -32,17 +36,8 @@ namespace ClothingShop.Services
             using var smtp = new SmtpClient();
             try
             {
-                await smtp.ConnectAsync(
-                    _configuration["EmailSettings:SmtpServer"],
-                    int.Parse(_configuration["EmailSettings:Port"] ?? "587"),
-                    SecureSocketOptions.StartTls
-                );
-
-                await smtp.AuthenticateAsync(
-                    _configuration["EmailSettings:Username"],
-                    _configuration["EmailSettings:Password"]
-                );
-
+                await smtp.ConnectAsync(smtpServer, smtpPort, SecureSocketOptions.StartTls);
+                await smtp.AuthenticateAsync(username, password);
                 await smtp.SendAsync(email);
                 await smtp.DisconnectAsync(true);
             }

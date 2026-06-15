@@ -36,6 +36,7 @@
                             @{
                                 var badgeClass = Model.Status switch
                                 {
+                                    "Chờ thanh toán" => "bg-secondary text-white",
                                     "Chờ xác nhận" => "bg-warning text-dark",
                                     "Chờ lấy hàng" => "bg-info",
                                     "Chờ giao hàng" => "bg-primary",
@@ -55,7 +56,13 @@
                                     <label class="form-label fw-bold">Cập nhật trạng thái:</label>
                                     <div class="input-group mb-2">
                                         <select name="status" class="form-select" required>
-                                            @if (Model.Status == "Chờ xác nhận")
+                                            @if (Model.Status == "Chờ thanh toán")
+                                            {
+                                                <option value="Chờ thanh toán" selected>Chờ thanh toán</option>
+                                                <option value="Chờ xác nhận">Chờ xác nhận</option>
+                                                <option value="Chờ lấy hàng">Chờ lấy hàng</option>
+                                            }
+                                            else if (Model.Status == "Chờ xác nhận")
                                             {
                                                 <option value="Chờ xác nhận" selected>Chờ xác nhận</option>
                                                 <option value="Chờ lấy hàng">Chờ lấy hàng</option>
@@ -136,8 +143,36 @@
                                 }
                             </tbody>
                             <tfoot class="table-light">
+                                @{
+                                    decimal itemsTotal = Model.Items.Sum(i => i.Price * i.Quantity);
+                                    decimal shippingFee = itemsTotal < 500000 ? 20000 : 0;
+                                }
                                 <tr>
-                                    <td colspan="3" class="text-end fw-bold fs-5">TỔNG CỘNG:</td>
+                                    <td colspan="3" class="text-end fw-bold text-muted small">TẠM TÍNH:</td>
+                                    <td class="text-end fw-bold text-muted small">@itemsTotal.ToString("N0")₫</td>
+                                </tr>
+                                @if (Model.DiscountAmount > 0)
+                                {
+                                    <tr>
+                                        <td colspan="3" class="text-end fw-bold text-success small">
+                                            <i class="fas fa-tag me-1"></i>GIẢM GIÁ @(string.IsNullOrEmpty(Model.VoucherCode) ? "" : $"({Model.VoucherCode})"):
+                                        </td>
+                                        <td class="text-end text-success fw-bold small">-@Model.DiscountAmount.ToString("N0")₫</td>
+                                    </tr>
+                                }
+                                <tr>
+                                    <td colspan="3" class="text-end fw-bold text-muted small">PHÍ VẬN CHUYỂN:</td>
+                                    @if (shippingFee > 0)
+                                    {
+                                        <td class="text-end text-muted fw-bold small">@shippingFee.ToString("N0")₫</td>
+                                    }
+                                    else
+                                    {
+                                        <td class="text-end text-success fw-bold small">Miễn phí</td>
+                                    }
+                                </tr>
+                                <tr>
+                                    <td colspan="3" class="text-end fw-bold fs-5 text-dark">TỔNG CỘNG:</td>
                                     <td class="text-end fw-bold fs-5 text-danger">@Model.TotalAmount.ToString("N0")₫</td>
                                 </tr>
                             </tfoot>
@@ -190,11 +225,32 @@
                         <label class="text-muted small">Ngày đặt hàng:</label>
                         <p class="mb-0">@Model.OrderDate.ToString("dd/MM/yyyy HH:mm:ss")</p>
                     </div>
+                    <hr>
+                    <div class="mb-3">
+                        <label class="text-muted small">Người nhận hàng:</label>
+                        <p class="fw-bold mb-0">@Model.FullName</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Số điện thoại nhận:</label>
+                        <p class="fw-bold mb-0">@Model.PhoneNumber</p>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-muted small">Địa chỉ nhận hàng (Delivery Address):</label>
+                        <p class="fw-bold mb-0 text-primary">@Model.Address</p>
+                    </div>
+                    @if (!string.IsNullOrEmpty(Model.Note))
+                    {
+                        <div class="mb-3 p-2 bg-light rounded border border-warning-subtle">
+                            <label class="text-muted small d-block fw-bold"><i class="fas fa-sticky-note me-1 text-warning"></i>Ghi chú của khách:</label>
+                            <p class="mb-0 fst-italic">@Model.Note</p>
+                        </div>
+                    }
+                    <hr>
                     <div class="mb-3">
                         <label class="text-muted small">Tổng số sản phẩm:</label>
                         <p class="mb-0">@Model.Items.Sum(i => i.Quantity) sản phẩm</p>
                     </div>
-                    <div>
+                    <div class="mb-3">
                         <label class="text-muted small">Tổng giá trị:</label>
                         <p class="fw-bold text-danger fs-5 mb-0">@Model.TotalAmount.ToString("N0")₫</p>
                     </div>

@@ -1,0 +1,210 @@
+@model ClothingShop.Models.Voucher
+@using ClothingShop.Models.Enums
+@{
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+    ViewData["Title"] = "Chi tiết Voucher " + Model.Code;
+    var usages = ViewBag.Usages as List<ClothingShop.Models.VoucherUsage>;
+    var now = DateTime.Now;
+    
+    bool isExpired = Model.EndDate < now;
+    bool isExhausted = Model.UsageLimit.HasValue && Model.UsedCount >= Model.UsageLimit.Value;
+    bool isActiveNow = Model.IsActive && Model.StartDate <= now && !isExpired && !isExhausted;
+}
+
+<div class="row mb-3">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/Admin">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="/Admin/Vouchers">Quản lý Voucher</a></li>
+                <li class="breadcrumb-item active" aria-current="page">Chi tiết</li>
+            </ol>
+        </nav>
+        <div class="d-flex justify-content-between align-items-center">
+            <h4 class="fw-bold m-0"><i class="fas fa-ticket-alt text-primary me-2"></i>Chi tiết Voucher: @Model.Code</h4>
+            <div class="d-flex gap-2">
+                <a href="/Admin/Vouchers/Edit/@Model.Id" class="btn btn-warning text-dark"><i class="fas fa-edit me-2"></i>Chỉnh sửa</a>
+                <a href="/Admin/Vouchers" class="btn btn-outline-secondary"><i class="fas fa-arrow-left me-2"></i>Quay lại danh sách</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Cấu hình và chi tiết -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-light border-0 py-3">
+                <h6 class="fw-bold m-0 text-dark"><i class="fas fa-cog text-muted me-2"></i>Thông số kỹ thuật</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <span class="badge bg-secondary font-monospace fs-4 text-dark border border-secondary border-opacity-50 px-3 py-2">@Model.Code</span>
+                    <p class="text-muted small mt-2 mb-0">Ngày tạo: @Model.CreatedAt.ToString("dd/MM/yyyy HH:mm")</p>
+                </div>
+                
+                <table class="table table-borderless align-middle m-0 small">
+                    <tbody>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Mô tả:</td>
+                            <td class="fw-bold text-dark py-3">@(Model.Description ?? "Không có mô tả")</td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Trạng thái hiện tại:</td>
+                            <td class="py-3">
+                                @if (isActiveNow)
+                                {
+                                    <span class="badge bg-success bg-opacity-10 text-success px-2 py-1"><i class="fas fa-check-circle me-1"></i>Hoạt động</span>
+                                }
+                                else if (!Model.IsActive)
+                                {
+                                    <span class="badge bg-secondary bg-opacity-10 text-secondary px-2 py-1"><i class="fas fa-pause-circle me-1"></i>Tắt kích hoạt</span>
+                                }
+                                else if (isExhausted)
+                                {
+                                    <span class="badge bg-danger bg-opacity-10 text-danger px-2 py-1"><i class="fas fa-times-circle me-1"></i>Hết lượt</span>
+                                }
+                                else if (Model.StartDate > now)
+                                {
+                                    <span class="badge bg-warning bg-opacity-10 text-warning px-2 py-1"><i class="fas fa-clock me-1"></i>Chờ hiệu lực</span>
+                                }
+                            </td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Loại giảm giá:</td>
+                            <td class="fw-bold text-dark py-3">
+                                @(Model.DiscountType == VoucherDiscountType.Percentage ? "Giảm theo phần trăm (%)" : "Giảm số tiền cố định (đ)")
+                            </td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Mức giảm giá:</td>
+                            <td class="fw-bold text-success py-3">
+                                @(Model.DiscountType == VoucherDiscountType.Percentage ? Model.DiscountValue.ToString("G29") + "%" : Model.DiscountValue.ToString("N0") + "₫")
+                            </td>
+                        </tr>
+                        @if (Model.DiscountType == VoucherDiscountType.Percentage)
+                        {
+                            <tr class="border-bottom">
+                                <td class="text-muted py-3">Giảm tối đa:</td>
+                                <td class="fw-bold text-dark py-3">
+                                    @(Model.MaxDiscountAmount.HasValue ? Model.MaxDiscountAmount.Value.ToString("N0") + "₫" : "Không giới hạn")
+                                </td>
+                            </tr>
+                        }
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Giá trị đơn hàng tối thiểu:</td>
+                            <td class="fw-bold text-dark py-3">
+                                @Model.MinOrderAmount.ToString("N0")₫
+                            </td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Tổng giới hạn sử dụng:</td>
+                            <td class="fw-bold text-dark py-3">
+                                @(Model.UsageLimit.HasValue ? Model.UsageLimit.Value.ToString() + " lượt" : "Không giới hạn")
+                            </td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Lượt dùng trên mỗi khách:</td>
+                            <td class="fw-bold text-dark py-3">
+                                @Model.LimitPerUser lượt/khách hàng
+                            </td>
+                        </tr>
+                        <tr class="border-bottom">
+                            <td class="text-muted py-3">Ngày bắt đầu hiệu lực:</td>
+                            <td class="fw-bold text-dark py-3">
+                                @Model.StartDate.ToString("dd/MM/yyyy HH:mm")
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted py-3">Ngày hết hạn:</td>
+                            <td class="fw-bold @(isExpired ? "text-danger" : "text-dark") py-3">
+                                @Model.EndDate.ToString("dd/MM/yyyy HH:mm")
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Tổng quan lượt dùng -->
+        <div class="card border-0 shadow-sm bg-primary bg-opacity-10">
+            <div class="card-body p-4 text-center">
+                <h3 class="fw-bold text-primary m-0">@Model.UsedCount / @(Model.UsageLimit.HasValue ? Model.UsageLimit.Value.ToString() : "∞")</h3>
+                <p class="text-muted small m-0 mb-3">Lượt sử dụng thực tế / Tổng giới hạn</p>
+                
+                @if (Model.UsageLimit.HasValue && Model.UsageLimit.Value > 0)
+                {
+                    var percent = (int)Math.Min(100, (double)Model.UsedCount / Model.UsageLimit.Value * 100);
+                    <div class="progress mb-2" style="height: 10px;">
+                        <div class="progress-bar @(percent >= 90 ? "bg-danger" : percent >= 60 ? "bg-warning" : "bg-primary")" role="progressbar" style="width: @percent%"></div>
+                    </div>
+                    <span class="small text-muted">Đã sử dụng @percent% hạn ngạch phát hành</span>
+                }
+                else
+                {
+                    <div class="progress mb-2" style="height: 10px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: 100%"></div>
+                    </div>
+                    <span class="small text-muted">Hạn ngạch phát hành không giới hạn</span>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Lịch sử sử dụng -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-light border-0 py-3">
+                <h6 class="fw-bold m-0 text-dark"><i class="fas fa-history text-muted me-2"></i>Lịch sử khách hàng sử dụng mã</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light text-muted uppercase small">
+                            <tr>
+                                <th class="ps-4">Thời gian dùng</th>
+                                <th>Khách hàng</th>
+                                <th>Mã đơn hàng</th>
+                                <th class="pe-4 text-end">Số tiền giảm</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @if (usages == null || !usages.Any())
+                            {
+                                <tr>
+                                    <td colspan="4" class="text-center py-5 text-muted">
+                                        <i class="fas fa-history fa-2x mb-2 text-secondary"></i>
+                                        <p class="m-0 small fw-bold">Chưa có khách hàng nào áp dụng mã này.</p>
+                                    </td>
+                                </tr>
+                            }
+                            else
+                            {
+                                foreach (var usage in usages)
+                                {
+                                    <tr>
+                                        <td class="ps-4 small text-muted">
+                                            @usage.UsedAt.ToString("dd/MM/yyyy HH:mm")
+                                        </td>
+                                        <td>
+                                            <div class="fw-bold text-dark small">@usage.User.FullName</div>
+                                            <div class="text-muted small" style="font-size: 0.75rem;">@usage.User.Email</div>
+                                        </td>
+                                        <td>
+                                            <a href="/Admin/Orders/Details/@usage.OrderId" class="badge bg-primary text-white text-decoration-none">
+                                                #@usage.OrderId.ToString("D6")
+                                            </a>
+                                        </td>
+                                        <td class="pe-4 text-end fw-bold text-success">
+                                            -@usage.Order.DiscountAmount.ToString("N0")₫
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

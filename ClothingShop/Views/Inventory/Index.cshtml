@@ -95,7 +95,15 @@
                                     <span class="badge bg-danger">Xuất</span>
                                 }
                             </td>
-                            <td>@item.Product?.Name</td>
+                            <td>
+                                @item.Product?.Name
+                                @if (item.ProductVariant != null)
+                                {
+                                    <span class="text-muted small d-block">
+                                        Biến thể: Size <strong>@item.ProductVariant.Size</strong> - Màu <strong>@item.ProductVariant.Color</strong>
+                                    </span>
+                                }
+                            </td>
                             <td><strong>@item.Quantity</strong></td>
                             <td>@item.Reason</td>
                             <td>@item.Creator?.FullName</td>

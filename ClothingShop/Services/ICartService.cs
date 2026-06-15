@@ -1,4 +1,4 @@
-﻿using ClothingShop.Models;
+using ClothingShop.Models;
 
 namespace ClothingShop.Services
 {
@@ -11,5 +11,6 @@ namespace ClothingShop.Services
         void ClearCart();
         int GetTotalItems();
         decimal GetTotalPrice();
+        Task<List<CartItem>> GetBuyNowCartItemAsync(int productId, int quantity = 1, string? size = null, string? color = null);
     }
 }

@@ -12,20 +12,21 @@ namespace ClothingShop.Controllers.Admin
     {
         private readonly ApplicationDbContext _context = context;
         private readonly IWebHostEnvironment _env = env;
+        private static readonly string[] AllowedExtensions = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"];
 
         // GET: /Admin/Products
         [HttpGet("")]
         public async Task<IActionResult> Index(string? search, string? category, string? gender, string? sortBy, int page = 1)
         {
             const int pageSize = 10;
-            
+
             // Load danh mục động
             ViewBag.Categories = await _context.ProductCategories
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.DisplayOrder)
                 .Select(c => c.Name)
                 .ToListAsync();
-            
+
             var query = _context.Products.Where(p => !p.IsDeleted).AsQueryable();
 
             // Tìm kiếm
@@ -56,8 +57,8 @@ namespace ClothingShop.Controllers.Admin
                 "name_desc" => query.OrderByDescending(p => p.Name),
                 "price_asc" => query.OrderBy(p => p.Price),
                 "price_desc" => query.OrderByDescending(p => p.Price),
-                "stock_asc" => query.OrderBy(p => p.Quantity),
-                "stock_desc" => query.OrderByDescending(p => p.Quantity),
+                "stock_asc" => query.OrderBy(p => p.ProductVariants.Sum(pv => pv.Quantity)),
+                "stock_desc" => query.OrderByDescending(p => p.ProductVariants.Sum(pv => pv.Quantity)),
                 _ => query.OrderByDescending(p => p.Id)
             };
             ViewBag.SortBy = sortBy;
@@ -65,7 +66,7 @@ namespace ClothingShop.Controllers.Admin
             // Phân trang
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            
+
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalItems = totalItems;
@@ -74,7 +75,7 @@ namespace ClothingShop.Controllers.Admin
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
-            
+
             return View("~/Views/Admin/Products.cshtml", products);
         }
 
@@ -99,42 +100,30 @@ namespace ClothingShop.Controllers.Admin
                 var uploadPath = Path.Combine(_env.WebRootPath, "images", "products");
                 Directory.CreateDirectory(uploadPath);
 
-                // Xử lý upload ảnh chính
-                if (imageFile != null && imageFile.Length > 0)
+                try
                 {
-                    var fileName = Guid.NewGuid().ToString() + Path.GetExtension(imageFile.FileName);
-                    var filePath = Path.Combine(uploadPath, fileName);
-                    
-                    using (var stream = new FileStream(filePath, FileMode.Create))
+                    // Xử lý upload ảnh chính
+                    var mainImageUrl = await SaveImageAsync(imageFile, uploadPath);
+                    if (mainImageUrl != null)
                     {
-                        await imageFile.CopyToAsync(stream);
+                        product.ImageUrl = mainImageUrl;
                     }
-                    
-                    product.ImageUrl = "/images/products/" + fileName;
-                }
 
-                // Xử lý upload ảnh phụ
-                if (additionalImages != null && additionalImages.Count > 0)
-                {
-                    var imageUrls = new List<string>();
-                    
-                    foreach (var image in additionalImages.Take(5)) // Giới hạn 5 ảnh
+                    // Xử lý upload ảnh phụ
+                    var addImagesJson = await SaveAdditionalImagesAsync(additionalImages, uploadPath);
+                    if (addImagesJson != null)
                     {
-                        if (image.Length > 0)
-                        {
-                            var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
-                            var filePath = Path.Combine(uploadPath, fileName);
-                            
-                            using (var stream = new FileStream(filePath, FileMode.Create))
-                            {
-                                await image.CopyToAsync(stream);
-                            }
-                            
-                            imageUrls.Add("/images/products/" + fileName);
-                        }
+                        product.AdditionalImages = addImagesJson;
                     }
-                    
-                    product.AdditionalImages = System.Text.Json.JsonSerializer.Serialize(imageUrls);
+                }
+                catch (InvalidOperationException ex)
+                {
+                    ModelState.AddModelError("", ex.Message);
+                    ViewBag.Categories = await _context.ProductCategories
+                        .Where(c => c.IsActive)
+                        .OrderBy(c => c.DisplayOrder)
+                        .ToListAsync();
+                    return View("~/Views/Admin/CreateProduct.cshtml", product);
                 }
 
                 // Set mặc định
@@ -145,19 +134,28 @@ namespace ClothingShop.Controllers.Admin
 
                 _context.Products.Add(product);
                 await _context.SaveChangesAsync();
-                
+
+                // Đồng bộ hóa các biến thể cho sản phẩm mới tạo
+                await ClothingShop.Common.ProductVariantHelper.SyncVariantsAsync(_context, product);
+
                 TempData["Success"] = "Thêm sản phẩm thành công! Vui lòng vào 'Quản lý Kho hàng → Nhập kho' để thêm hàng.";
                 return RedirectToAction(nameof(Index));
             }
 
-            return View(product);
+            ViewBag.Categories = await _context.ProductCategories
+                .Where(c => c.IsActive)
+                .OrderBy(c => c.DisplayOrder)
+                .ToListAsync();
+            return View("~/Views/Admin/CreateProduct.cshtml", product);
         }
 
         // GET: /Admin/Products/Edit/{id}
         [HttpGet("Edit/{id}")]
         public async Task<IActionResult> Edit(int id)
         {
-            var product = await _context.Products.FindAsync(id);
+            var product = await _context.Products
+                .Include(p => p.ProductVariants)
+                .FirstOrDefaultAsync(p => p.Id == id);
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
@@ -168,7 +166,7 @@ namespace ClothingShop.Controllers.Admin
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.DisplayOrder)
                 .ToListAsync();
-            
+
             return View("~/Views/Admin/EditProduct.cshtml", product);
         }
 
@@ -177,7 +175,9 @@ namespace ClothingShop.Controllers.Admin
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Update(Product product, IFormFile? imageFile, List<IFormFile>? additionalImages)
         {
-            var existingProduct = await _context.Products.FindAsync(product.Id);
+            var existingProduct = await _context.Products
+                .Include(p => p.ProductVariants)
+                .FirstOrDefaultAsync(p => p.Id == product.Id);
             if (existingProduct == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
@@ -187,68 +187,63 @@ namespace ClothingShop.Controllers.Admin
             var uploadPath = Path.Combine(_env.WebRootPath, "images", "products");
             Directory.CreateDirectory(uploadPath);
 
-            // Xử lý upload ảnh chính mới (nếu có)
-            if (imageFile != null && imageFile.Length > 0)
+            try
             {
-                // Xóa ảnh cũ
-                if (!string.IsNullOrEmpty(existingProduct.ImageUrl))
+                // Xử lý upload ảnh chính mới (nếu có)
+                if (imageFile != null && imageFile.Length > 0)
                 {
-                    var oldImagePath = Path.Combine(_env.WebRootPath, existingProduct.ImageUrl.TrimStart('/'));
-                    if (System.IO.File.Exists(oldImagePath))
+                    // Xóa ảnh cũ
+                    if (!string.IsNullOrEmpty(existingProduct.ImageUrl))
                     {
-                        System.IO.File.Delete(oldImagePath);
+                        var oldImagePath = Path.Combine(_env.WebRootPath, existingProduct.ImageUrl.TrimStart('/'));
+                        if (System.IO.File.Exists(oldImagePath))
+                        {
+                            System.IO.File.Delete(oldImagePath);
+                        }
+                    }
+
+                    var mainImageUrl = await SaveImageAsync(imageFile, uploadPath);
+                    if (mainImageUrl != null)
+                    {
+                        existingProduct.ImageUrl = mainImageUrl;
                     }
                 }
 
-                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(imageFile.FileName);
-                var filePath = Path.Combine(uploadPath, fileName);
-                
-                using (var stream = new FileStream(filePath, FileMode.Create))
+                // Xử lý upload ảnh phụ mới (nếu có)
+                if (additionalImages != null && additionalImages.Count > 0)
                 {
-                    await imageFile.CopyToAsync(stream);
-                }
-                
-                existingProduct.ImageUrl = "/images/products/" + fileName;
-            }
-
-            // Xử lý upload ảnh phụ mới (nếu có)
-            if (additionalImages != null && additionalImages.Count > 0)
-            {
-                // Xóa ảnh phụ cũ
-                if (!string.IsNullOrEmpty(existingProduct.AdditionalImages))
-                {
-                    var oldImages = System.Text.Json.JsonSerializer.Deserialize<List<string>>(existingProduct.AdditionalImages);
-                    if (oldImages != null)
+                    // Xóa ảnh phụ cũ
+                    if (!string.IsNullOrEmpty(existingProduct.AdditionalImages))
                     {
-                        foreach (var imgUrl in oldImages)
+                        var oldImages = System.Text.Json.JsonSerializer.Deserialize<List<string>>(existingProduct.AdditionalImages);
+                        if (oldImages != null)
                         {
-                            var oldImagePath = Path.Combine(_env.WebRootPath, imgUrl.TrimStart('/'));
-                            if (System.IO.File.Exists(oldImagePath))
+                            foreach (var imgUrl in oldImages)
                             {
-                                System.IO.File.Delete(oldImagePath);
+                                var oldImagePath = Path.Combine(_env.WebRootPath, imgUrl.TrimStart('/'));
+                                if (System.IO.File.Exists(oldImagePath))
+                                {
+                                    System.IO.File.Delete(oldImagePath);
+                                }
                             }
                         }
                     }
-                }
 
-                var imageUrls = new List<string>();
-                foreach (var image in additionalImages.Take(5))
-                {
-                    if (image.Length > 0)
+                    var addImagesJson = await SaveAdditionalImagesAsync(additionalImages, uploadPath);
+                    if (addImagesJson != null)
                     {
-                        var fileName = Guid.NewGuid().ToString() + Path.GetExtension(image.FileName);
-                        var filePath = Path.Combine(uploadPath, fileName);
-                        
-                        using (var stream = new FileStream(filePath, FileMode.Create))
-                        {
-                            await image.CopyToAsync(stream);
-                        }
-                        
-                        imageUrls.Add("/images/products/" + fileName);
+                        existingProduct.AdditionalImages = addImagesJson;
                     }
                 }
-                
-                existingProduct.AdditionalImages = System.Text.Json.JsonSerializer.Serialize(imageUrls);
+            }
+            catch (InvalidOperationException ex)
+            {
+                TempData["Error"] = ex.Message;
+                ViewBag.Categories = await _context.ProductCategories
+                    .Where(c => c.IsActive)
+                    .OrderBy(c => c.DisplayOrder)
+                    .ToListAsync();
+                return View("~/Views/Admin/EditProduct.cshtml", product);
             }
 
             // Cập nhật thông tin sản phẩm (KHÔNG cập nhật Price và Quantity)
@@ -259,22 +254,20 @@ namespace ClothingShop.Controllers.Admin
             existingProduct.Size = product.Size;
             existingProduct.Color = product.Color;
             // Price và Quantity GIỮ NGUYÊN - chỉ được cập nhật qua "Nhập kho"
-            // existingProduct.Price = existingProduct.Price; (không cần vì không thay đổi)
-            // existingProduct.Quantity = existingProduct.Quantity; (không cần vì không thay đổi)
 
-            // Đánh dấu chỉ những field được phép thay đổi
             _context.Entry(existingProduct).Property(p => p.Name).IsModified = true;
             _context.Entry(existingProduct).Property(p => p.Description).IsModified = true;
             _context.Entry(existingProduct).Property(p => p.Category).IsModified = true;
             _context.Entry(existingProduct).Property(p => p.Gender).IsModified = true;
-            _context.Entry(existingProduct).Property(p => p.Size).IsModified = true;
-            _context.Entry(existingProduct).Property(p => p.Color).IsModified = true;
             _context.Entry(existingProduct).Property(p => p.ImageUrl).IsModified = true;
             _context.Entry(existingProduct).Property(p => p.AdditionalImages).IsModified = true;
-            // Price và Quantity KHÔNG được đánh dấu IsModified
+            // Size, Color, Price và Quantity KHÔNG được đánh dấu IsModified (Size/Color được đồng bộ qua SyncVariantsAsync)
 
             await _context.SaveChangesAsync();
-            
+
+            // Đồng bộ hóa các biến thể khi cập nhật Size hoặc Màu sắc sản phẩm
+            await ClothingShop.Common.ProductVariantHelper.SyncVariantsAsync(_context, existingProduct);
+
             TempData["Success"] = "Cập nhật thông tin sản phẩm thành công!";
             return RedirectToAction(nameof(Index));
         }
@@ -285,7 +278,7 @@ namespace ClothingShop.Controllers.Admin
         public async Task<IActionResult> Delete(int id)
         {
             var product = await _context.Products.FindAsync(id);
-            
+
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
@@ -301,7 +294,7 @@ namespace ClothingShop.Controllers.Admin
             // SOFT DELETE - Chỉ đánh dấu là đã xóa, không xóa thật
             product.IsDeleted = true;
             product.DeletedAt = DateTime.Now;
-            
+
             await _context.SaveChangesAsync();
 
             TempData["Success"] = "Đã xóa sản phẩm thành công!";
@@ -313,7 +306,7 @@ namespace ClothingShop.Controllers.Admin
         public async Task<IActionResult> Deleted(string? search, int page = 1)
         {
             const int pageSize = 10;
-            
+
             var query = _context.Products.Where(p => p.IsDeleted).AsQueryable();
 
             // Tìm kiếm
@@ -329,7 +322,7 @@ namespace ClothingShop.Controllers.Admin
             // Phân trang
             var totalItems = await query.CountAsync();
             var totalPages = (int)Math.Ceiling(totalItems / (double)pageSize);
-            
+
             ViewBag.CurrentPage = page;
             ViewBag.TotalPages = totalPages;
             ViewBag.TotalItems = totalItems;
@@ -338,7 +331,7 @@ namespace ClothingShop.Controllers.Admin
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
-            
+
             return View("~/Views/Admin/DeletedProducts.cshtml", products);
         }
 
@@ -348,7 +341,7 @@ namespace ClothingShop.Controllers.Admin
         public async Task<IActionResult> Restore(int id)
         {
             var product = await _context.Products.FindAsync(id);
-            
+
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
@@ -364,7 +357,7 @@ namespace ClothingShop.Controllers.Admin
             // Khôi phục sản phẩm
             product.IsDeleted = false;
             product.DeletedAt = null;
-            
+
             await _context.SaveChangesAsync();
 
             TempData["Success"] = $"Đã khôi phục sản phẩm '{product.Name}' thành công!";
@@ -377,7 +370,7 @@ namespace ClothingShop.Controllers.Admin
         public async Task<IActionResult> PermanentDelete(int id)
         {
             var product = await _context.Products.FindAsync(id);
-            
+
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
@@ -437,6 +430,57 @@ namespace ClothingShop.Controllers.Admin
 
             TempData["Success"] = "Đã xóa vĩnh viễn sản phẩm!";
             return RedirectToAction(nameof(Deleted));
+        }
+
+        private static async Task<string?> SaveImageAsync(IFormFile? file, string uploadPath)
+        {
+            if (file == null || file.Length == 0) return null;
+
+            var ext = Path.GetExtension(file.FileName).ToLower();
+            if (!AllowedExtensions.Contains(ext))
+            {
+                throw new InvalidOperationException($"Định dạng file chính không hợp lệ ({ext})! Chỉ chấp nhận hình ảnh (.jpg, .jpeg, .png, .gif, .webp, .avif).");
+            }
+
+            var fileName = Guid.NewGuid().ToString() + ext;
+            var filePath = Path.Combine(uploadPath, fileName);
+
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await file.CopyToAsync(stream);
+            }
+
+            return "/images/products/" + fileName;
+        }
+
+        private static async Task<string?> SaveAdditionalImagesAsync(List<IFormFile>? files, string uploadPath)
+        {
+            if (files == null || files.Count == 0) return null;
+
+            var imageUrls = new List<string>();
+            foreach (var image in files.Take(5)) // Giới hạn 5 ảnh
+            {
+                if (image.Length > 0)
+                {
+                    var ext = Path.GetExtension(image.FileName).ToLower();
+                    if (!AllowedExtensions.Contains(ext))
+                    {
+                        throw new InvalidOperationException($"Định dạng file phụ không hợp lệ ({ext})! Chỉ chấp nhận hình ảnh (.jpg, .jpeg, .png, .gif, .webp, .avif).");
+                    }
+
+                    var fileName = Guid.NewGuid().ToString() + ext;
+                    var filePath = Path.Combine(uploadPath, fileName);
+
+                    await using (var stream = new FileStream(filePath, FileMode.Create))
+                    {
+                        await image.CopyToAsync(stream);
+                    }
+
+                    imageUrls.Add("/images/products/" + fileName);
+                }
+            }
+
+            return imageUrls.Count > 0 ? System.Text.Json.JsonSerializer.Serialize(imageUrls) : null;
         }
     }
 }

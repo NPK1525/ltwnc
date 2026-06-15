@@ -9,7 +9,7 @@ namespace ClothingShop.Models
         public int Rating { get; set; } // 1-5 sao
         public string? Comment { get; set; }
         public DateTime CreatedAt { get; set; }
-        
+
         // Navigation properties
         public Product? Product { get; set; }
         public User? User { get; set; }

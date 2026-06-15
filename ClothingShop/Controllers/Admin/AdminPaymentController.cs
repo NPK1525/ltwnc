@@ -1,57 +1,79 @@
-using ClothingShop.Data;
 using ClothingShop.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace ClothingShop.Controllers.Admin
 {
     [Authorize(Policy = "AdminOnly")]
     [Route("Admin/Payment")]
-    public class AdminPaymentController(ApplicationDbContext context) : Controller
+    public class AdminPaymentController(IConfiguration configuration, IWebHostEnvironment env) : Controller
     {
-        private readonly ApplicationDbContext _context = context;
+        private readonly IConfiguration _configuration = configuration;
+        private readonly IWebHostEnvironment _env = env;
+
+        // Cache JsonSerializerOptions để tránh tạo mới mỗi lần
+        private static readonly JsonSerializerOptions _jsonOptions = new() { WriteIndented = true };
 
         // GET: /Admin/Payment
         [HttpGet("")]
-        public async Task<IActionResult> Index()
+        public IActionResult Index()
         {
-            var paymentInfo = await _context.PaymentInfos.FirstOrDefaultAsync();
-            
-            // Nếu chưa có, tạo mới với giá trị mặc định
-            if (paymentInfo == null)
+            var paymentInfo = new PaymentInfoViewModel
             {
-                paymentInfo = new PaymentInfo();
-                _context.PaymentInfos.Add(paymentInfo);
-                await _context.SaveChangesAsync();
-            }
-            
+                BankName = _configuration["PaymentInfo:BankName"] ?? "Vietcombank",
+                BankAccountNumber = _configuration["PaymentInfo:BankAccountNumber"] ?? "1234567890",
+                BankAccountName = _configuration["PaymentInfo:BankAccountName"] ?? "NGUYEN VAN A",
+                MoMoPhone = _configuration["PaymentInfo:MoMoPhone"] ?? "0901234567",
+                MoMoName = _configuration["PaymentInfo:MoMoName"] ?? "NGUYEN VAN A"
+            };
+
             return View("~/Views/Admin/PaymentSettings.cshtml", paymentInfo);
         }
 
         // POST: /Admin/Payment/Update
         [HttpPost("Update")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Update(PaymentInfo model)
+        public IActionResult Update(PaymentInfoViewModel model)
         {
-            var paymentInfo = await _context.PaymentInfos.FirstOrDefaultAsync();
-            
-            if (paymentInfo == null)
+            if (!ModelState.IsValid)
             {
-                TempData["Error"] = "Không tìm thấy thông tin thanh toán!";
-                return RedirectToAction(nameof(Index));
+                return View("~/Views/Admin/PaymentSettings.cshtml", model);
             }
 
-            paymentInfo.BankName = model.BankName;
-            paymentInfo.BankAccountNumber = model.BankAccountNumber;
-            paymentInfo.BankAccountName = model.BankAccountName;
-            paymentInfo.MoMoPhone = model.MoMoPhone;
-            paymentInfo.MoMoName = model.MoMoName;
-            paymentInfo.UpdatedAt = DateTime.Now;
+            try
+            {
+                // Đọc appsettings.json
+                var appSettingsPath = Path.Combine(_env.ContentRootPath, "appsettings.json");
+                var json = System.IO.File.ReadAllText(appSettingsPath);
+                var jsonObj = JsonSerializer.Deserialize<Dictionary<string, object>>(json);
 
-            await _context.SaveChangesAsync();
+                if (jsonObj != null)
+                {
+                    // Cập nhật PaymentInfo
+                    var paymentInfo = new Dictionary<string, string>
+                    {
+                        ["BankName"] = model.BankName,
+                        ["BankAccountNumber"] = model.BankAccountNumber,
+                        ["BankAccountName"] = model.BankAccountName,
+                        ["MoMoPhone"] = model.MoMoPhone,
+                        ["MoMoName"] = model.MoMoName
+                    };
 
-            TempData["Success"] = "Cập nhật thông tin thanh toán thành công!";
+                    jsonObj["PaymentInfo"] = paymentInfo;
+
+                    // Ghi lại file
+                    var updatedJson = JsonSerializer.Serialize(jsonObj, _jsonOptions);
+                    System.IO.File.WriteAllText(appSettingsPath, updatedJson);
+
+                    TempData["Success"] = "Cập nhật thông tin thanh toán thành công! Vui lòng restart ứng dụng để áp dụng thay đổi.";
+                }
+            }
+            catch (Exception ex)
+            {
+                TempData["Error"] = $"Lỗi khi cập nhật: {ex.Message}";
+            }
+
             return RedirectToAction(nameof(Index));
         }
     }

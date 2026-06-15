@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using ClothingShop.Data;
 using ClothingShop.Models;
 using Microsoft.EntityFrameworkCore;
+using ClothingShop.Common;
 
 namespace ClothingShop.Controllers.Admin
 {
@@ -11,6 +12,41 @@ namespace ClothingShop.Controllers.Admin
     public class InventoryController(ApplicationDbContext context) : Controller
     {
         private readonly ApplicationDbContext _context = context;
+
+        // GET: /Admin/Inventory/GetVariants
+        [HttpGet("GetVariants")]
+        public async Task<IActionResult> GetVariants(int productId)
+        {
+            var product = await _context.Products
+                .Include(p => p.ProductVariants)
+                .FirstOrDefaultAsync(p => p.Id == productId);
+            if (product == null) return NotFound();
+
+            var hasVariants = await _context.ProductVariants.AnyAsync(pv => pv.ProductId == productId);
+            if (!hasVariants)
+            {
+                await ClothingShop.Common.ProductVariantHelper.SyncVariantsAsync(_context, product);
+            }
+
+            var sizes = ClothingShop.Common.ProductVariantHelper.GetActiveSizes(product);
+            var colors = ClothingShop.Common.ProductVariantHelper.GetActiveColors(product);
+            var validKeys = new HashSet<(string size, string color)>(
+                sizes.SelectMany(s => colors.Select(c => (s, c)))
+            );
+
+            var dbVariants = await _context.ProductVariants
+                .Where(pv => pv.ProductId == productId)
+                .OrderBy(pv => pv.Size)
+                .ThenBy(pv => pv.Color)
+                .ToListAsync();
+
+            var activeVariants = dbVariants
+                .Where(pv => validKeys.Contains((pv.Size, pv.Color)))
+                .Select(pv => new { pv.Id, pv.Size, pv.Color, pv.Quantity, pv.Price })
+                .ToList();
+
+            return Json(activeVariants);
+        }
 
         // GET: /Admin/Inventory - Danh sách giao dịch kho
         [HttpGet("")]
@@ -21,6 +57,7 @@ namespace ClothingShop.Controllers.Admin
 
             var query = _context.InventoryTransactions
                 .Include(it => it.Product)
+                .Include(it => it.ProductVariant)
                 .Include(it => it.Creator)
                 .AsQueryable();
 
@@ -78,7 +115,7 @@ namespace ClothingShop.Controllers.Admin
             ViewBag.Products = await _context.Products
                 .OrderBy(p => p.Name)
                 .ToListAsync();
-            
+
             // Nếu có productId, tự động chọn sản phẩm đó
             if (productId.HasValue)
             {
@@ -86,22 +123,20 @@ namespace ClothingShop.Controllers.Admin
                 var product = await _context.Products.FindAsync(productId.Value);
                 ViewBag.SelectedProduct = product;
             }
-            
+
             return View();
         }
 
         // POST: /Admin/Inventory/ImportStock - Xử lý nhập kho
         [HttpPost("ImportStock")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ImportStock(int productId, int quantity, string? supplier, decimal? cost, decimal sellingPrice, string? reason)
+        public async Task<IActionResult> ImportStock(int productId, int variantId, int quantity, string? supplier, decimal? cost, decimal sellingPrice, string? reason, string batchNumber)
         {
-            var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            var userIdString = HttpContext.Session.GetString(Constants.SessionKeys.UserId);
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
 
             if (quantity <= 0)
             {
@@ -122,24 +157,68 @@ namespace ClothingShop.Controllers.Admin
                 return RedirectToAction(nameof(ImportStock));
             }
 
+            var variant = await _context.ProductVariants.FindAsync(variantId);
+            if (variant == null || variant.ProductId != productId)
+            {
+                TempData["Error"] = "Không tìm thấy biến thể hợp lệ!";
+                return RedirectToAction(nameof(ImportStock));
+            }
+
+            // Tạo mã lô hàng mặc định nếu để trống
+            var finalBatchNumber = string.IsNullOrWhiteSpace(batchNumber)
+                ? $"BATCH-{DateTime.Now:yyyyMMdd-HHmmss}"
+                : batchNumber.Trim();
+
             // Tạo giao dịch nhập kho
             var transaction = new InventoryTransaction
             {
                 ProductId = productId,
+                ProductVariantId = variantId,
                 Type = "Nhập",
                 Quantity = quantity,
                 Supplier = supplier,
                 Cost = cost,
-                Reason = reason,
+                Reason = reason ?? $"Nhập kho biến thể Size {variant.Size} - Màu {variant.Color} (Lô: {finalBatchNumber})",
                 CreatedBy = userId,
                 CreatedAt = DateTime.Now
             };
 
             _context.InventoryTransactions.Add(transaction);
 
-            // Cập nhật số lượng tồn kho, giá nhập và giá bán
-            product.Quantity += quantity;
-            product.Price = sellingPrice;
+            // TẠO LÔ HÀNG TỒN KHO MỚI (BATCH)
+            var variantBatch = new ProductVariantBatch
+            {
+                ProductVariantId = variantId,
+                BatchNumber = finalBatchNumber,
+                Cost = cost ?? 0,
+                ImportQuantity = quantity,
+                RemainingQuantity = quantity,
+                CreatedAt = DateTime.Now
+            };
+
+            _context.ProductVariantBatches.Add(variantBatch);
+
+            // Cập nhật số lượng tồn kho biến thể và giá bán riêng của biến thể
+            variant.Quantity += quantity;
+            variant.Price = sellingPrice;
+
+            // Cập nhật giá bán tối thiểu cho Product dựa trên tất cả biến thể có giá > 0
+            var allVariants = await _context.ProductVariants
+                .Where(pv => pv.ProductId == productId)
+                .ToListAsync();
+
+            // Gán trực tiếp giá trị của biến thể hiện tại vừa cập nhật
+            var curVar = allVariants.FirstOrDefault(v => v.Id == variantId);
+            if (curVar != null)
+            {
+                curVar.Price = sellingPrice;
+            }
+
+            var activePrices = allVariants.Where(v => v.Price > 0).Select(v => v.Price).ToList();
+            var minPrice = activePrices.Count > 0 ? activePrices.Min() : sellingPrice;
+            product.Price = minPrice;
+
+            // Cập nhật giá nhập tổng thể (Cost) của sản phẩm để tham khảo nhanh
             if (cost.HasValue)
             {
                 product.Cost = cost.Value;
@@ -147,7 +226,7 @@ namespace ClothingShop.Controllers.Admin
 
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = $"Đã nhập {quantity} sản phẩm '{product.Name}' vào kho với giá bán {sellingPrice:N0}₫!";
+            TempData["Success"] = $"Đã nhập lô '{finalBatchNumber}' với {quantity} sản phẩm '{product.Name}' (Size: {variant.Size}, Màu: {variant.Color}, Giá bán: {sellingPrice:N0}₫) vào kho!";
             return RedirectToAction(nameof(Index));
         }
 
@@ -156,10 +235,10 @@ namespace ClothingShop.Controllers.Admin
         public async Task<IActionResult> ExportStock(int? productId)
         {
             ViewBag.Products = await _context.Products
-                .Where(p => p.Quantity > 0)
+                .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                 .OrderBy(p => p.Name)
                 .ToListAsync();
-            
+
             // Nếu có productId, tự động chọn sản phẩm đó
             if (productId.HasValue)
             {
@@ -167,22 +246,20 @@ namespace ClothingShop.Controllers.Admin
                 var product = await _context.Products.FindAsync(productId.Value);
                 ViewBag.SelectedProduct = product;
             }
-            
+
             return View();
         }
 
         // POST: /Admin/Inventory/ExportStock - Xử lý xuất kho
         [HttpPost("ExportStock")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> ExportStock(int productId, int quantity, string? reason)
+        public async Task<IActionResult> ExportStock(int productId, int variantId, int quantity, string? reason)
         {
-            var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            var userIdString = HttpContext.Session.GetString(Constants.SessionKeys.UserId);
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
 
             if (quantity <= 0)
             {
@@ -197,9 +274,16 @@ namespace ClothingShop.Controllers.Admin
                 return RedirectToAction(nameof(ExportStock));
             }
 
-            if (product.Quantity < quantity)
+            var variant = await _context.ProductVariants.FindAsync(variantId);
+            if (variant == null || variant.ProductId != productId)
             {
-                TempData["Error"] = $"Không đủ hàng trong kho! Hiện có: {product.Quantity}";
+                TempData["Error"] = "Không tìm thấy biến thể hợp lệ!";
+                return RedirectToAction(nameof(ExportStock));
+            }
+
+            if (variant.Quantity < quantity)
+            {
+                TempData["Error"] = $"Không đủ hàng trong kho cho biến thể này! Hiện có: {variant.Quantity}";
                 return RedirectToAction(nameof(ExportStock));
             }
 
@@ -207,9 +291,10 @@ namespace ClothingShop.Controllers.Admin
             var transaction = new InventoryTransaction
             {
                 ProductId = productId,
+                ProductVariantId = variantId,
                 Type = "Xuất",
                 Quantity = quantity,
-                Reason = reason,
+                Reason = reason ?? $"Xuất kho biến thể Size {variant.Size} - Màu {variant.Color}",
                 CreatedBy = userId,
                 CreatedAt = DateTime.Now
             };
@@ -217,11 +302,12 @@ namespace ClothingShop.Controllers.Admin
             _context.InventoryTransactions.Add(transaction);
 
             // Cập nhật số lượng tồn kho
+            variant.Quantity -= quantity;
             product.Quantity -= quantity;
 
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = $"Đã xuất {quantity} sản phẩm '{product.Name}' khỏi kho!";
+            TempData["Success"] = $"Đã xuất {quantity} sản phẩm '{product.Name}' (Size: {variant.Size}, Màu: {variant.Color}) khỏi kho!";
             return RedirectToAction(nameof(Index));
         }
 
@@ -250,15 +336,15 @@ namespace ClothingShop.Controllers.Admin
             {
                 "name_asc" => query.OrderBy(p => p.Name),
                 "name_desc" => query.OrderByDescending(p => p.Name),
-                "stock_asc" => query.OrderBy(p => p.Quantity),
-                "stock_desc" => query.OrderByDescending(p => p.Quantity),
+                "stock_asc" => query.OrderBy(p => p.ProductVariants.Sum(pv => pv.Quantity)),
+                "stock_desc" => query.OrderByDescending(p => p.ProductVariants.Sum(pv => pv.Quantity)),
                 "price_asc" => query.OrderBy(p => p.Price),
                 "price_desc" => query.OrderByDescending(p => p.Price),
                 _ => query.OrderBy(p => p.Name)
             };
             ViewBag.SortBy = sortBy;
 
-            var products = await query.ToListAsync();
+            var products = await query.Include(p => p.ProductVariants).ToListAsync();
 
             // Thống kê
             ViewBag.TotalProducts = products.Count;
@@ -306,40 +392,46 @@ namespace ClothingShop.Controllers.Admin
         [HttpGet("EditProduct/{id}")]
         public async Task<IActionResult> EditProduct(int id)
         {
-            var product = await _context.Products.FindAsync(id);
+            var product = await _context.Products
+                .Include(p => p.ProductVariants)
+                .FirstOrDefaultAsync(p => p.Id == id);
+
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
                 return RedirectToAction(nameof(LowStockAlert));
             }
-            
+
+            // Đồng bộ nếu chưa có biến thể
+            if (product.ProductVariants == null || product.ProductVariants.Count == 0)
+            {
+                await ClothingShop.Common.ProductVariantHelper.SyncVariantsAsync(_context, product);
+                product = await _context.Products
+                    .Include(p => p.ProductVariants)
+                    .FirstOrDefaultAsync(p => p.Id == id);
+            }
+
             return View(product);
         }
 
         // POST: /Admin/Inventory/UpdateProduct - Cập nhật số lượng và giá
         [HttpPost("UpdateProduct")]
         [ValidateAntiForgeryToken]
-        public async Task<IActionResult> UpdateProduct(int id, int quantity, decimal? cost, decimal price)
+        public async Task<IActionResult> UpdateProduct(int id, Dictionary<int, int> variantQuantities, decimal? cost, decimal price)
         {
-            var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            var userIdString = HttpContext.Session.GetString(Constants.SessionKeys.UserId);
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return RedirectToAction("Login", "Account");
             }
+            var product = await _context.Products
+                .Include(p => p.ProductVariants)
+                .FirstOrDefaultAsync(p => p.Id == id);
 
-            var userId = int.Parse(userIdString);
-            var product = await _context.Products.FindAsync(id);
-            
             if (product == null)
             {
                 TempData["Error"] = "Không tìm thấy sản phẩm!";
                 return RedirectToAction(nameof(LowStockAlert));
-            }
-
-            if (quantity < 0)
-            {
-                TempData["Error"] = "Số lượng không được âm!";
-                return RedirectToAction(nameof(EditProduct), new { id });
             }
 
             if (price <= 0)
@@ -348,37 +440,66 @@ namespace ClothingShop.Controllers.Admin
                 return RedirectToAction(nameof(EditProduct), new { id });
             }
 
-            // Lưu giá trị cũ để ghi log
-            var oldQuantity = product.Quantity;
-            var oldPrice = product.Price;
+            // Cập nhật các biến thể và ghi nhận giao dịch kho
+            int totalQuantity = 0;
+            if (variantQuantities != null)
+            {
+                foreach (var kv in variantQuantities)
+                {
+                    var variant = await _context.ProductVariants.FindAsync(kv.Key);
+                    if (variant != null && variant.ProductId == id)
+                    {
+                        var oldQty = variant.Quantity;
+                        var newQty = kv.Value;
+                        if (newQty < 0) newQty = 0;
 
-            // Cập nhật
-            product.Quantity = quantity;
+                        if (oldQty != newQty)
+                        {
+                            variant.Quantity = newQty;
+
+                            var transaction = new InventoryTransaction
+                            {
+                                ProductId = id,
+                                ProductVariantId = variant.Id,
+                                Type = newQty > oldQty ? "Nhập" : "Xuất",
+                                Quantity = Math.Abs(newQty - oldQty),
+                                Cost = cost,
+                                Reason = $"Chỉnh sửa biến thể (Size: {variant.Size}, Màu: {variant.Color}): {oldQty} → {newQty}",
+                                CreatedBy = userId,
+                                CreatedAt = DateTime.Now
+                            };
+                            _context.InventoryTransactions.Add(transaction);
+                        }
+
+                        totalQuantity += newQty;
+                    }
+                }
+            }
+            else
+            {
+                totalQuantity = product.Quantity;
+            }
+
+            // Cập nhật giá bán & giá nhập của sản phẩm tổng thể
+            product.Quantity = totalQuantity;
             product.Price = price;
             if (cost.HasValue)
             {
                 product.Cost = cost.Value;
             }
 
-            // Tạo log nếu số lượng thay đổi
-            if (oldQuantity != quantity)
+            // Đồng thời cập nhật giá bán của các biến thể để đồng bộ với giá mới
+            if (product.ProductVariants != null)
             {
-                var transaction = new InventoryTransaction
+                foreach (var variant in product.ProductVariants)
                 {
-                    ProductId = id,
-                    Type = quantity > oldQuantity ? "Nhập" : "Xuất",
-                    Quantity = Math.Abs(quantity - oldQuantity),
-                    Cost = cost,
-                    Reason = $"Chỉnh sửa trực tiếp: {oldQuantity} → {quantity}",
-                    CreatedBy = userId,
-                    CreatedAt = DateTime.Now
-                };
-                _context.InventoryTransactions.Add(transaction);
+                    variant.Price = price;
+                }
             }
 
             await _context.SaveChangesAsync();
 
-            TempData["Success"] = $"Đã cập nhật sản phẩm '{product.Name}'!";
+            TempData["Success"] = $"Đã cập nhật tồn kho & giá cho sản phẩm '{product.Name}' thành công!";
             return RedirectToAction(nameof(LowStockAlert));
         }
 
@@ -400,15 +521,15 @@ namespace ClothingShop.Controllers.Admin
             {
                 "name_asc" => query.OrderBy(p => p.Name),
                 "name_desc" => query.OrderByDescending(p => p.Name),
-                "stock_asc" => query.OrderBy(p => p.Quantity),
-                "stock_desc" => query.OrderByDescending(p => p.Quantity),
+                "stock_asc" => query.OrderBy(p => p.ProductVariants.Sum(pv => pv.Quantity)),
+                "stock_desc" => query.OrderByDescending(p => p.ProductVariants.Sum(pv => pv.Quantity)),
                 "price_asc" => query.OrderBy(p => p.Price),
                 "price_desc" => query.OrderByDescending(p => p.Price),
-                _ => query.OrderBy(p => p.Quantity) // Mặc định: tồn kho thấp trước
+                _ => query.OrderBy(p => p.ProductVariants.Sum(pv => pv.Quantity)) // Mặc định: tồn kho thấp trước
             };
             ViewBag.SortBy = sortBy;
 
-            var products = await query.ToListAsync();
+            var products = await query.Include(p => p.ProductVariants).ToListAsync();
 
             // Thống kê
             ViewBag.TotalProducts = products.Count;

@@ -1,124 +1,255 @@
-﻿@model IEnumerable<ClothingShop.Models.Product>
+@model IEnumerable<ClothingShop.Models.Product>
 @{
-    ViewData["Title"] = "Tất cả sản phẩm";
+    ViewData["Title"] = !string.IsNullOrEmpty(ViewBag.Search) ? "Tìm kiếm: " + ViewBag.Search : "Tất cả sản phẩm";
 }
 
-<div class="container py-5">
+<!-- HEADER BANNER DYNAMIC VÀ SIÊU ĐẸP -->
+<div class="container-fluid bg-dark text-white py-5 mb-5 position-relative overflow-hidden" style="background: linear-gradient(135deg, #1a1a1a 0%, #0d0d0d 100%); margin-top: -24px;">
+    <div class="position-absolute top-0 start-0 w-100 h-100 opacity-25" style="background-image: radial-gradient(circle at 20% 50%, #3a3a3a, transparent 40%);"></div>
+    <div class="container position-relative" style="z-index: 10;">
+        @if (!string.IsNullOrEmpty(ViewBag.Search))
+        {
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-danger px-3 py-2 text-uppercase fw-bold" style="letter-spacing: 1px;">KẾT QUẢ TÌM KIẾM</span>
+            </div>
+            <h1 class="fw-bold mb-2 text-uppercase" style="font-size: 2.2rem; letter-spacing: 2px;">
+                <i class="fas fa-search me-3 text-danger"></i>"@ViewBag.Search"
+            </h1>
+            <p class="text-white-50 mb-0" style="font-size: 1.05rem;">Tìm thấy <span class="text-white fw-bold">@Model.Count()</span> sản phẩm phù hợp với từ khóa của bạn</p>
+        }
+        else if (!string.IsNullOrEmpty(ViewBag.Category))
+        {
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-primary px-3 py-2 text-uppercase fw-bold" style="letter-spacing: 1px;">DANH MỤC SẢN PHẨM</span>
+            </div>
+            <h1 class="fw-bold mb-2 text-uppercase" style="font-size: 2.2rem; letter-spacing: 2px;">
+                @ViewBag.Category
+            </h1>
+            <p class="text-white-50 mb-0" style="font-size: 1.05rem;">Khám phá bộ sưu tập sản phẩm thuộc danh mục <span class="text-white fw-bold">@ViewBag.Category</span></p>
+        }
+        else if (!string.IsNullOrEmpty(ViewBag.Gender))
+        {
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-info px-3 py-2 text-uppercase fw-bold text-dark" style="letter-spacing: 1px;">BỘ SƯU TẬP</span>
+            </div>
+            <h1 class="fw-bold mb-2 text-uppercase" style="font-size: 2.2rem; letter-spacing: 2px;">
+                Thời trang @(ViewBag.Gender == "Nam" ? "Nam Giới" : ViewBag.Gender == "Nữ" ? "Nữ Giới" : "Unisex")
+            </h1>
+            <p class="text-white-50 mb-0" style="font-size: 1.05rem;">Cập nhật các phong cách thời thượng dành cho <span class="text-white fw-bold">@ViewBag.Gender</span></p>
+        }
+        else
+        {
+            <div class="d-flex align-items-center mb-2">
+                <span class="badge bg-success px-3 py-2 text-uppercase fw-bold" style="letter-spacing: 1px;">CỬA HÀNG ONLINE</span>
+            </div>
+            <h1 class="fw-bold mb-2 text-uppercase" style="font-size: 2.2rem; letter-spacing: 2px;">
+                Tất Cả Sản Phẩm
+            </h1>
+            <p class="text-white-50 mb-0" style="font-size: 1.05rem;">Trải nghiệm mua sắm tuyệt vời cùng những mẫu thiết kế đẳng cấp nhất</p>
+        }
+    </div>
+</div>
+
+<div class="container pb-5">
     <div class="row">
         <!-- SIDEBAR LỌC SIÊU ĐẸP -->
-        <div class="col-lg-3">
+        <div class="col-lg-3 transition-all" id="sidebarCol">
             <form method="get" asp-action="Index" id="filterForm">
-                <div class="sidebar-filter sticky-top bg-white rounded-4 shadow-sm p-4" style="top: 110px; z-index: 900;">
-                    <h5 class="fw-bold mb-4 text-uppercase text-dark">Bộ lọc</h5>
+                <!-- Hidden inputs to submit values cleanly via selectFilter() -->
+                <input type="hidden" name="category" id="hiddenCategory" value="@ViewBag.Category" />
+                <input type="hidden" name="gender" id="hiddenGender" value="@ViewBag.Gender" />
+                <input type="hidden" name="size" id="hiddenSize" value="@ViewBag.Size" />
+                <input type="hidden" name="color" id="hiddenColor" value="@ViewBag.Color" />
+                <input type="hidden" name="search" value="@ViewBag.Search" />
+                <input type="hidden" name="sort" value="@ViewBag.Sort" />
+
+                <div class="sidebar-filter sticky-top bg-white rounded-4 shadow-sm p-4" style="top: 110px; z-index: 900; border: 1px solid #eee;">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="fw-bold text-uppercase text-dark mb-0" style="letter-spacing: 1px;">Bộ lọc</h5>
+                    </div>
 
                     <!-- LOẠI SẢN PHẨM -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold text-secondary mb-3">Loại sản phẩm</h6>
-                        <select name="category" class="form-select">
-                            <option value="">Tất cả</option>
+                    <div class="mb-4 border-bottom pb-3">
+                        <h6 class="fw-bold text-dark mb-3 text-uppercase" style="font-size: 0.85rem; letter-spacing: 1px;">Loại sản phẩm</h6>
+                        <div class="d-flex flex-column gap-2">
+                            <a href="javascript:void(0)" onclick="selectFilter('category', '')" class="text-decoration-none d-flex align-items-center @(string.IsNullOrEmpty(ViewBag.Category) ? "fw-bold text-dark" : "text-secondary")" style="font-size: 0.9rem;">
+                                <i class="fas @(string.IsNullOrEmpty(ViewBag.Category) ? "fa-circle-dot text-dark" : "fa-circle text-muted") me-2" style="font-size: 0.75rem;"></i>Tất cả
+                            </a>
                             @if (ViewBag.Categories != null)
                             {
                                 foreach (var c in ViewBag.Categories)
                                 {
-                                    <option value="@c" selected="@(ViewBag.Category == c)">@c</option>
+                                    <a href="javascript:void(0)" onclick="selectFilter('category', '@c')" class="text-decoration-none d-flex align-items-center @(ViewBag.Category == c ? "fw-bold text-dark" : "text-secondary")" style="font-size: 0.9rem;">
+                                        <i class="fas @(ViewBag.Category == c ? "fa-circle-dot text-dark" : "fa-circle text-muted") me-2" style="font-size: 0.75rem;"></i>@c
+                                    </a>
                                 }
                             }
-                        </select>
+                        </div>
                     </div>
 
                     <!-- GIỚI TÍNH -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold text-secondary mb-3">Giới tính</h6>
-                        <select name="gender" class="form-select">
-                            <option value="">Tất cả</option>
+                    <div class="mb-4 border-bottom pb-3">
+                        <h6 class="fw-bold text-dark mb-3 text-uppercase" style="font-size: 0.85rem; letter-spacing: 1px;">Giới tính</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="javascript:void(0)" onclick="selectFilter('gender', '')" class="btn btn-sm px-3 py-2 rounded-0 border @(string.IsNullOrEmpty(ViewBag.Gender) ? "btn-dark border-dark" : "btn-light border-light text-secondary")" style="font-size: 0.8rem; min-width: 60px;">
+                                Tất cả
+                            </a>
                             @foreach (var g in new[] { "Nam", "Nữ", "Unisex" })
                             {
-                                <option value="@g" selected="@(ViewBag.Gender == g)">@g</option>
+                                <a href="javascript:void(0)" onclick="selectFilter('gender', '@g')" class="btn btn-sm px-3 py-2 rounded-0 border @(ViewBag.Gender == g ? "btn-dark border-dark" : "btn-light border-light text-secondary")" style="font-size: 0.8rem;">
+                                    @g
+                                </a>
                             }
-                        </select>
+                        </div>
                     </div>
 
                     <!-- KÍCH CỠ -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold text-secondary mb-3">Kích cỡ</h6>
-                        <select name="size" class="form-select">
-                            <option value="">Tất cả</option>
+                    <div class="mb-4 border-bottom pb-3">
+                        <h6 class="fw-bold text-dark mb-3 text-uppercase" style="font-size: 0.85rem; letter-spacing: 1px;">Kích cỡ</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="javascript:void(0)" onclick="selectFilter('size', '')" class="size-chip d-flex align-items-center justify-content-center border @(string.IsNullOrEmpty(ViewBag.Size) ? "border-dark bg-dark text-white fw-bold" : "border-muted bg-white text-dark")" style="width: 40px; height: 40px; font-size: 0.75rem; text-decoration: none; transition: all 0.2s;">
+                                All
+                            </a>
                             @foreach (var s in new[] { "S", "M", "L", "XL", "XXL" })
                             {
-                                <option value="@s" selected="@(ViewBag.Size == s)">@s</option>
+                                <a href="javascript:void(0)" onclick="selectFilter('size', '@s')" class="size-chip d-flex align-items-center justify-content-center border @(ViewBag.Size == s ? "border-dark bg-dark text-white fw-bold" : "border-muted bg-white text-dark")" style="width: 40px; height: 40px; font-size: 0.8rem; text-decoration: none; transition: all 0.2s;">
+                                    @s
+                                </a>
                             }
-                        </select>
+                        </div>
                     </div>
 
                     <!-- MÀU SẮC -->
-                    <div class="mb-4">
-                        <h6 class="fw-bold text-secondary mb-3">Màu sắc</h6>
-                        <select name="color" class="form-select">
-                            <option value="">Tất cả</option>
-                            @foreach (var c in new[] { "Đen", "Trắng", "Xám", "Nâu", "Xanh dương", "Xanh lá", "Cam", "Vàng", "Đỏ", "Tím", "Hồng" })
+                    @{
+                        var colorMap = new Dictionary<string, string>
+                        {
+                            { "Đen", "#000000" },
+                            { "Trắng", "#ffffff" },
+                            { "Xám", "#808080" },
+                            { "Nâu", "#8b4513" },
+                            { "Xanh dương", "#0d6efd" },
+                            { "Xanh lá", "#198754" },
+                            { "Cam", "#fd7e14" },
+                            { "Vàng", "#ffc107" },
+                            { "Đỏ", "#dc3545" },
+                            { "Tím", "#6f42c1" },
+                            { "Hồng", "#e83e8c" }
+                        };
+                    }
+                    <div class="mb-2">
+                        <h6 class="fw-bold text-dark mb-3 text-uppercase" style="font-size: 0.85rem; letter-spacing: 1px;">Màu sắc</h6>
+                        <div class="d-flex flex-wrap gap-2">
+                            <a href="javascript:void(0)" onclick="selectFilter('color', '')" class="color-dot-wrapper position-relative text-decoration-none" title="Tất cả">
+                                <span class="d-block rounded-circle border @(string.IsNullOrEmpty(ViewBag.Color) ? "outline-active border-dark" : "border-muted")" style="width: 28px; height: 28px; background: linear-gradient(45deg, red, orange, yellow, green, blue, indigo, violet); transition: all 0.2s;"></span>
+                            </a>
+                            @foreach (var c in colorMap)
                             {
-                                <option value="@c" selected="@(ViewBag.Color == c)">@c</option>
+                                var isSelected = ViewBag.Color == c.Key;
+                                <a href="javascript:void(0)" onclick="selectFilter('color', '@c.Key')" class="color-dot-wrapper position-relative text-decoration-none" title="@c.Key">
+                                    <span class="d-block rounded-circle border @(isSelected ? "outline-active border-dark" : "border-muted")" style="width: 28px; height: 28px; background-color: @c.Value; transition: all 0.2s;"></span>
+                                </a>
                             }
-                        </select>
-                    </div>
-
-                    <!-- NÚT ÁP DỤNG LỌC -->
-                    <div class="d-grid gap-2">
-                        <button type="submit" class="btn btn-dark btn-lg">
-                            Áp dụng lọc
-                        </button>
-                        <a href="@Url.Action("Index")" class="btn btn-outline-secondary btn-lg">
-                            Xóa bộ lọc
-                        </a>
+                        </div>
                     </div>
                 </div>
             </form>
         </div>
 
         <!-- DANH SÁCH SẢN PHẨM -->
-        <div class="col-lg-9">
+        <div class="col-lg-9 transition-all" id="productGridCol">
             @{
                 var productRatings = ViewBag.ProductRatings as IDictionary<int, dynamic>;
             }
             
-            
-            
             <div class="d-flex justify-content-between align-items-center mb-4">
-                <h2 class="fw-bold">Tìm thấy @Model.Count() sản phẩm</h2>
-                <div class="dropdown">
-                    <button class="btn btn-outline-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" style="min-width: 200px;">
-                        @{
-                            var sortText = ViewBag.Sort switch
-                            {
-                                "price_asc" => "Giá thấp đến cao",
-                                "price_desc" => "Giá cao đến thấp",
-                                _ => "Mới nhất"
-                            };
-                        }
-                        @sortText
+                <div>
+                    <h4 class="fw-bold mb-1">Danh sách sản phẩm</h4>
+                    <p class="text-muted mb-0 small">Tìm thấy <span class="fw-bold text-dark">@Model.Count()</span> sản phẩm</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-dark d-flex align-items-center gap-2" id="btnToggleFilters" onclick="toggleFilters()" style="border-radius: 0; min-height: 38px;">
+                        <i class="fas fa-sliders-h"></i>
+                        <span id="toggleText">Ẩn bộ lọc</span>
                     </button>
-                    <ul class="dropdown-menu">
-                        <li>
-                            <a class="dropdown-item @(ViewBag.Sort == "newest" || ViewBag.Sort == null ? "active" : "")" 
-                               href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "newest" })">
-                                Mới nhất
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item @(ViewBag.Sort == "price_asc" ? "active" : "")" 
-                               href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "price_asc" })">
-                                Giá thấp đến cao
-                            </a>
-                        </li>
-                        <li>
-                            <a class="dropdown-item @(ViewBag.Sort == "price_desc" ? "active" : "")" 
-                               href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "price_desc" })">
-                                Giá cao đến thấp
-                            </a>
-                        </li>
-                    </ul>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-dark dropdown-toggle" type="button" data-bs-toggle="dropdown" style="min-width: 200px; border-radius: 0; min-height: 38px;">
+                            @{
+                                var sortText = ViewBag.Sort switch
+                                {
+                                    "price_asc" => "Giá thấp đến cao",
+                                    "price_desc" => "Giá cao đến thấp",
+                                    _ => "Mới nhất"
+                                };
+                            }
+                            Sắp xếp: @sortText
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" style="border-radius: 0;">
+                            <li>
+                                <a class="dropdown-item @(ViewBag.Sort == "newest" || ViewBag.Sort == null ? "active" : "")" 
+                                   href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "newest" })">
+                                    Mới nhất
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item @(ViewBag.Sort == "price_asc" ? "active" : "")" 
+                                   href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "price_asc" })">
+                                    Giá thấp đến cao
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item @(ViewBag.Sort == "price_desc" ? "active" : "")" 
+                                   href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = "price_desc" })">
+                                    Giá cao đến thấp
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </div>
             </div>
+
+            <!-- BỘ LỌC ĐANG CHỌN (NÚT XÓA BỘ LỌC ĐỘNG) -->
+            @if (!string.IsNullOrEmpty(ViewBag.Search) || !string.IsNullOrEmpty(ViewBag.Category) || !string.IsNullOrEmpty(ViewBag.Gender) || !string.IsNullOrEmpty(ViewBag.Size) || !string.IsNullOrEmpty(ViewBag.Color))
+            {
+                <div class="d-flex flex-wrap gap-2 align-items-center mb-4 p-3 bg-light rounded-3">
+                    <span class="text-muted small fw-bold"><i class="fas fa-filter me-1"></i>Bộ lọc:</span>
+                    @if (!string.IsNullOrEmpty(ViewBag.Search))
+                    {
+                        <span class="badge bg-white text-dark border px-3 py-2 rounded-pill d-flex align-items-center">
+                            Từ khóa: @ViewBag.Search
+                            <a href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, sort = ViewBag.Sort })" class="text-danger ms-2 text-decoration-none fw-bold" style="font-size:1.1rem;">×</a>
+                        </span>
+                    }
+                    @if (!string.IsNullOrEmpty(ViewBag.Category))
+                    {
+                        <span class="badge bg-white text-dark border px-3 py-2 rounded-pill d-flex align-items-center">
+                            Loại: @ViewBag.Category
+                            <a href="@Url.Action("Index", new { search = ViewBag.Search, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, sort = ViewBag.Sort })" class="text-danger ms-2 text-decoration-none fw-bold" style="font-size:1.1rem;">×</a>
+                        </span>
+                    }
+                    @if (!string.IsNullOrEmpty(ViewBag.Gender))
+                    {
+                        <span class="badge bg-white text-dark border px-3 py-2 rounded-pill d-flex align-items-center">
+                            Giới tính: @ViewBag.Gender
+                            <a href="@Url.Action("Index", new { search = ViewBag.Search, category = ViewBag.Category, size = ViewBag.Size, color = ViewBag.Color, sort = ViewBag.Sort })" class="text-danger ms-2 text-decoration-none fw-bold" style="font-size:1.1rem;">×</a>
+                        </span>
+                    }
+                    @if (!string.IsNullOrEmpty(ViewBag.Size))
+                    {
+                        <span class="badge bg-white text-dark border px-3 py-2 rounded-pill d-flex align-items-center">
+                            Size: @ViewBag.Size
+                            <a href="@Url.Action("Index", new { search = ViewBag.Search, category = ViewBag.Category, gender = ViewBag.Gender, color = ViewBag.Color, sort = ViewBag.Sort })" class="text-danger ms-2 text-decoration-none fw-bold" style="font-size:1.1rem;">×</a>
+                        </span>
+                    }
+                    @if (!string.IsNullOrEmpty(ViewBag.Color))
+                    {
+                        <span class="badge bg-white text-dark border px-3 py-2 rounded-pill d-flex align-items-center">
+                            Màu: @ViewBag.Color
+                            <a href="@Url.Action("Index", new { search = ViewBag.Search, category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, sort = ViewBag.Sort })" class="text-danger ms-2 text-decoration-none fw-bold" style="font-size:1.1rem;">×</a>
+                        </span>
+                    }
+                    <a href="@Url.Action("Index")" class="text-danger small ms-auto text-decoration-none fw-bold"><i class="fas fa-trash-alt me-1"></i> Xóa tất cả</a>
+                </div>
+            }
 
             <div class="row g-4">
                 @foreach (var p in Model)
@@ -184,6 +315,31 @@
                     </div>
                 }
             </div>
+
+            <!-- PHÂN TRANG -->
+            @if (ViewBag.TotalPages > 1)
+            {
+                <nav aria-label="Page navigation" class="mt-5">
+                    <ul class="pagination justify-content-center">
+                        <li class="page-item @(ViewBag.CurrentPage == 1 ? "disabled" : "")">
+                            <a class="page-link border-dark text-dark" href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = ViewBag.Sort, page = ViewBag.CurrentPage - 1 })" aria-label="Previous">
+                                <span aria-hidden="true">&laquo;</span>
+                            </a>
+                        </li>
+                        @for (int i = 1; i <= ViewBag.TotalPages; i++)
+                        {
+                            <li class="page-item @(ViewBag.CurrentPage == i ? "active" : "")">
+                                <a class="page-link @(ViewBag.CurrentPage == i ? "bg-dark border-dark text-white" : "border-dark text-dark")" href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = ViewBag.Sort, page = i })">@i</a>
+                            </li>
+                        }
+                        <li class="page-item @(ViewBag.CurrentPage == ViewBag.TotalPages ? "disabled" : "")">
+                            <a class="page-link border-dark text-dark" href="@Url.Action("Index", new { category = ViewBag.Category, gender = ViewBag.Gender, size = ViewBag.Size, color = ViewBag.Color, search = ViewBag.Search, sort = ViewBag.Sort, page = ViewBag.CurrentPage + 1 })" aria-label="Next">
+                                <span aria-hidden="true">&raquo;</span>
+                            </a>
+                        </li>
+                    </ul>
+                </nav>
+            }
 
             @if (!Model.Any())
             {
@@ -266,4 +422,110 @@
         max-height: calc(100vh - 130px);
         overflow-y: auto;
     }
+
+    /* REDESIGNED FILTERS STYLES */
+    .outline-active {
+        outline: 2px solid #000 !important;
+        outline-offset: 3px;
+        transform: scale(1.1);
+    }
+    
+    .size-chip {
+        border-radius: 0;
+    }
+    
+    .size-chip:hover {
+        border-color: #000 !important;
+        background-color: #f8f9fa;
+        color: #000 !important;
+    }
+    
+    .transition-all {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+    
+    #sidebarCol {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        max-width: 25%;
+        flex: 0 0 25%;
+        opacity: 1;
+        overflow: hidden;
+    }
+    
+    #sidebarCol.collapsed {
+        max-width: 0% !important;
+        flex: 0 0 0% !important;
+        opacity: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        pointer-events: none;
+    }
+    
+    #productGridCol {
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        max-width: 75%;
+        flex: 0 0 75%;
+    }
+    
+    #productGridCol.expanded {
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
+    }
+    
+    .color-dot-wrapper:hover span {
+        transform: scale(1.2);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    }
 </style>
+
+<script>
+    function selectFilter(name, value) {
+        const input = document.getElementById('hidden' + name.charAt(0).toUpperCase() + name.slice(1));
+        if (input) {
+            input.value = value;
+            document.getElementById('filterForm').submit();
+        }
+    }
+
+    function toggleFilters() {
+        const sidebar = document.getElementById('sidebarCol');
+        const productGrid = document.getElementById('productGridCol');
+        const toggleBtn = document.getElementById('btnToggleFilters');
+        const toggleText = document.getElementById('toggleText');
+        
+        if (sidebar.classList.contains('collapsed')) {
+            // Hiện sidebar
+            sidebar.classList.remove('collapsed');
+            productGrid.classList.remove('expanded');
+            toggleText.textContent = 'Ẩn bộ lọc';
+            toggleBtn.classList.remove('active');
+            localStorage.setItem('hideFilters', 'false');
+        } else {
+            // Ẩn sidebar
+            sidebar.classList.add('collapsed');
+            productGrid.classList.add('expanded');
+            toggleText.textContent = 'Hiện bộ lọc';
+            toggleBtn.classList.add('active');
+            localStorage.setItem('hideFilters', 'true');
+        }
+    }
+
+    // Khởi tạo trạng thái ẩn hiện bộ lọc từ localStorage
+    document.addEventListener('DOMContentLoaded', () => {
+        const hideFilters = localStorage.getItem('hideFilters');
+        if (hideFilters === 'true') {
+            const sidebar = document.getElementById('sidebarCol');
+            const productGrid = document.getElementById('productGridCol');
+            const toggleBtn = document.getElementById('btnToggleFilters');
+            const toggleText = document.getElementById('toggleText');
+            
+            if (sidebar && productGrid) {
+                sidebar.classList.add('collapsed');
+                productGrid.classList.add('expanded');
+                if (toggleText) toggleText.textContent = 'Hiện bộ lọc';
+                if (toggleBtn) toggleBtn.classList.add('active');
+            }
+        }
+    });
+</script>

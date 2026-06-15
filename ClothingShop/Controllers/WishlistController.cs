@@ -14,30 +14,28 @@ namespace ClothingShop.Controllers
         {
             // Kiểm tra đăng nhập
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 TempData["ErrorMessage"] = "Vui lòng đăng nhập để xem danh sách yêu thích";
                 return RedirectToAction("Login", "Account");
             }
-
-            var userId = int.Parse(userIdString);
             var products = await _context.WishlistItems
                 .Where(w => w.UserId == userId)
                 .Include(w => w.Product)
                 .Select(w => w.Product!)
                 .ToListAsync();
-            
+
             // Nếu chưa có sản phẩm yêu thích, lấy sản phẩm đề xuất
             if (products.Count == 0)
             {
                 var recommendedProducts = await _context.Products
-                    .Where(p => p.Quantity > 0)
+                    .Where(p => p.ProductVariants.Any(pv => pv.Quantity > 0))
                     .OrderByDescending(p => p.CreatedAt)
                     .Take(8)
                     .ToListAsync();
                 ViewBag.RecommendedProducts = recommendedProducts;
             }
-            
+
             return View(products);
         }
 
@@ -47,17 +45,15 @@ namespace ClothingShop.Controllers
         {
             // Kiểm tra đăng nhập
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return Json(new { success = false, message = "Vui lòng đăng nhập để thêm vào yêu thích", requireLogin = true });
             }
 
-            var userId = int.Parse(userIdString);
-            
             // Kiểm tra sản phẩm đã có trong wishlist chưa
             var exists = await _context.WishlistItems
                 .AnyAsync(w => w.UserId == userId && w.ProductId == productId);
-            
+
             if (!exists)
             {
                 var wishlistItem = new WishlistItem
@@ -70,7 +66,7 @@ namespace ClothingShop.Controllers
                 await _context.SaveChangesAsync();
                 return Json(new { success = true, message = "Đã thêm vào yêu thích", inWishlist = true });
             }
-            
+
             return Json(new { success = false, message = "Sản phẩm đã có trong danh sách yêu thích", inWishlist = true });
         }
 
@@ -80,23 +76,21 @@ namespace ClothingShop.Controllers
         {
             // Kiểm tra đăng nhập
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return Json(new { success = false, message = "Vui lòng đăng nhập", requireLogin = true });
             }
 
-            var userId = int.Parse(userIdString);
-            
             var wishlistItem = await _context.WishlistItems
                 .FirstOrDefaultAsync(w => w.UserId == userId && w.ProductId == productId);
-            
+
             if (wishlistItem != null)
             {
                 _context.WishlistItems.Remove(wishlistItem);
                 await _context.SaveChangesAsync();
                 return Json(new { success = true, message = "Đã xóa khỏi yêu thích", inWishlist = false });
             }
-            
+
             return Json(new { success = false, message = "Sản phẩm không có trong danh sách yêu thích", inWishlist = false });
         }
 
@@ -106,16 +100,14 @@ namespace ClothingShop.Controllers
         {
             // Kiểm tra đăng nhập
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return Json(new { success = false, message = "Vui lòng đăng nhập để thêm vào yêu thích", requireLogin = true });
             }
 
-            var userId = int.Parse(userIdString);
-            
             var wishlistItem = await _context.WishlistItems
                 .FirstOrDefaultAsync(w => w.UserId == userId && w.ProductId == request.ProductId);
-            
+
             if (wishlistItem != null)
             {
                 _context.WishlistItems.Remove(wishlistItem);
@@ -135,7 +127,7 @@ namespace ClothingShop.Controllers
                 return Json(new { success = true, message = "Đã thêm vào yêu thích", inWishlist = true });
             }
         }
-        
+
         public class ToggleRequest
         {
             public int ProductId { get; set; }
@@ -146,15 +138,13 @@ namespace ClothingShop.Controllers
         public async Task<IActionResult> Check(int productId)
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return Json(new { inWishlist = false });
             }
-
-            var userId = int.Parse(userIdString);
             var inWishlist = await _context.WishlistItems
                 .AnyAsync(w => w.UserId == userId && w.ProductId == productId);
-            
+
             return Json(new { inWishlist });
         }
 
@@ -163,15 +153,13 @@ namespace ClothingShop.Controllers
         public async Task<IActionResult> Count()
         {
             var userIdString = HttpContext.Session.GetString("UserId");
-            if (string.IsNullOrEmpty(userIdString))
+            if (string.IsNullOrEmpty(userIdString) || !int.TryParse(userIdString, out var userId))
             {
                 return Json(new { count = 0 });
             }
-
-            var userId = int.Parse(userIdString);
             var count = await _context.WishlistItems
                 .CountAsync(w => w.UserId == userId);
-            
+
             return Json(new { count });
         }
     }

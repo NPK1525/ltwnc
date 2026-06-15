@@ -15,13 +15,35 @@
                     
                     <div class="mb-3">
                         <label class="form-label">Sản phẩm <span class="text-danger">*</span></label>
-                        <select name="productId" class="form-select" required>
+                        <select name="productId" id="productSelect" class="form-select" required onchange="updateProductInfo()">
                             <option value="">-- Chọn sản phẩm --</option>
                             @foreach (var product in ViewBag.Products)
                             {
                                 <option value="@product.Id">@product.Name (Tồn: @product.Quantity)</option>
                             }
                         </select>
+                    </div>
+                    
+                    <!-- Lựa chọn biến thể Size & Màu sắc (Tách biệt để dễ quản lý) -->
+                    <div class="row mb-3" id="variantWrapper" style="display: none;">
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Kích cỡ (Size) <span class="text-danger">*</span></label>
+                            <select id="sizeSelect" class="form-select" required onchange="onSizeChange()">
+                                <option value="">-- Chọn Size --</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-2">
+                            <label class="form-label">Màu sắc <span class="text-danger">*</span></label>
+                            <select id="colorSelect" class="form-select" required onchange="onColorChange()">
+                                <option value="">-- Chọn Màu --</option>
+                            </select>
+                        </div>
+                        <input type="hidden" name="variantId" id="variantIdHidden" required />
+                    </div>
+
+                    <!-- Thông tin tồn kho hiện tại của biến thể -->
+                    <div id="currentInfo" class="alert alert-info" style="display: none;">
+                        <strong>Tồn kho của biến thể hiện tại:</strong> <span id="currentQuantity" class="text-primary fw-bold">0</span>
                     </div>
                     
                     <div class="mb-3">
@@ -43,7 +65,7 @@
                     
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        Lưu ý: Số lượng tồn kho sẽ bị trừ đi sau khi xuất!
+                        Lưu ý: Số lượng tồn kho của biến thể sẽ bị trừ đi sau khi xuất!
                     </div>
                     
                     <div class="d-flex gap-2">
@@ -59,3 +81,110 @@
         </div>
     </div>
 </div>
+
+@section Scripts {
+    <script>
+        let currentVariants = [];
+
+        async function updateProductInfo() {
+            const select = document.getElementById('productSelect');
+            const option = select.options[select.selectedIndex];
+            
+            const variantWrapper = document.getElementById('variantWrapper');
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const variantIdHidden = document.getElementById('variantIdHidden');
+            
+            // Xóa dữ liệu cũ
+            sizeSelect.innerHTML = '<option value="">-- Chọn Size --</option>';
+            colorSelect.innerHTML = '<option value="">-- Chọn Màu --</option>';
+            variantIdHidden.value = '';
+            document.getElementById('currentInfo').style.display = 'none';
+            variantWrapper.style.display = 'none';
+
+            if (option.value) {
+                const productId = option.value;
+                
+                try {
+                    const response = await fetch(`/Admin/Inventory/GetVariants?productId=${productId}`);
+                    if (response.ok) {
+                        currentVariants = await response.json();
+                        
+                        // Lấy danh sách size độc nhất
+                        const uniqueSizes = [...new Set(currentVariants.map(v => v.size))];
+                        
+                        uniqueSizes.forEach(size => {
+                            const opt = document.createElement('option');
+                            opt.value = size;
+                            opt.textContent = size;
+                            sizeSelect.appendChild(opt);
+                        });
+
+                        variantWrapper.style.display = 'flex';
+                    }
+                } catch (e) {
+                    console.error("Lỗi khi tải biến thể:", e);
+                }
+            }
+        }
+
+        function onSizeChange() {
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const variantIdHidden = document.getElementById('variantIdHidden');
+            
+            const selectedSize = sizeSelect.value;
+            
+            // Xóa màu cũ
+            colorSelect.innerHTML = '<option value="">-- Chọn Màu --</option>';
+            variantIdHidden.value = '';
+            document.getElementById('currentInfo').style.display = 'none';
+            
+            if (selectedSize) {
+                // Lọc các màu của size tương ứng
+                const availableVariants = currentVariants.filter(v => v.size === selectedSize);
+                
+                availableVariants.forEach(variant => {
+                    const opt = document.createElement('option');
+                    opt.value = variant.color;
+                    opt.textContent = `${variant.color} (Tồn: ${variant.quantity})`;
+                    opt.dataset.variantId = variant.id;
+                    opt.dataset.quantity = variant.quantity;
+                    colorSelect.appendChild(opt);
+                });
+            }
+        }
+
+        function onColorChange() {
+            const sizeSelect = document.getElementById('sizeSelect');
+            const colorSelect = document.getElementById('colorSelect');
+            const option = colorSelect.options[colorSelect.selectedIndex];
+            const variantIdHidden = document.getElementById('variantIdHidden');
+
+            if (option.value) {
+                const variantId = option.dataset.variantId;
+                const quantity = parseInt(option.dataset.quantity);
+
+                variantIdHidden.value = variantId;
+                document.getElementById('currentQuantity').textContent = quantity;
+                document.getElementById('currentInfo').style.display = 'block';
+                
+                // Cấu hình giới hạn tối đa cho input số lượng xuất
+                const qtyInput = document.querySelector('input[name="quantity"]');
+                if (qtyInput) {
+                    qtyInput.max = quantity;
+                    qtyInput.value = Math.min(qtyInput.value || 1, quantity);
+                }
+            } else {
+                variantIdHidden.value = '';
+                document.getElementById('currentInfo').style.display = 'none';
+            }
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            if (document.getElementById('productSelect').value) {
+                updateProductInfo();
+            }
+        });
+    </script>
+}
