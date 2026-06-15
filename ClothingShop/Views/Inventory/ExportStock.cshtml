@@ -15,11 +15,34 @@
                     
                     <div class="mb-3">
                         <label class="form-label">Sản phẩm <span class="text-danger">*</span></label>
-                        <select name="productId" id="productSelect" class="form-select" required onchange="updateProductInfo()">
+                        
+                        <!-- Widget Tìm Kiếm Sản Phẩm (Searchable Dropdown) -->
+                        <div class="position-relative search-select-container">
+                            <input type="text" id="productSearchInput" class="form-control" placeholder="🔍 Nhập tên sản phẩm để tìm kiếm..." autocomplete="off" />
+                            <div id="productDropdownList" class="dropdown-menu w-100 shadow-lg overflow-auto" style="max-height: 280px; display: none; margin-top: 2px; z-index: 1050; border-radius: 8px;">
+                                <div class="dropdown-header text-muted border-bottom pb-2 mb-1">-- Chọn sản phẩm dưới đây hoặc gõ tìm kiếm --</div>
+                                @foreach (var product in ViewBag.Products)
+                                {
+                                    <button type="button" class="dropdown-item product-item d-flex justify-content-between align-items-center py-2 border-bottom" 
+                                            data-id="@product.Id" 
+                                            data-name="@product.Name"
+                                            data-quantity="@product.Quantity">
+                                        <div class="fw-bold text-wrap text-start me-3 text-secondary" style="max-width: 75%; font-size: 0.95rem;">@product.Name</div>
+                                        <div class="text-nowrap text-end small">
+                                            <span class="badge bg-secondary">Tồn: @product.Quantity</span>
+                                        </div>
+                                    </button>
+                                }
+                                <div id="noProductFound" class="p-3 text-center text-muted" style="display: none;">❌ Không tìm thấy sản phẩm nào</div>
+                            </div>
+                        </div>
+
+                        <!-- Dropdown Select Ẩn để giữ nguyên logic MVC và validation -->
+                        <select name="productId" id="productSelect" class="form-select" style="display: none;" required onchange="updateProductInfo()">
                             <option value="">-- Chọn sản phẩm --</option>
                             @foreach (var product in ViewBag.Products)
                             {
-                                <option value="@product.Id">@product.Name (Tồn: @product.Quantity)</option>
+                                <option value="@product.Id" data-quantity="@product.Quantity">@product.Name (Tồn: @product.Quantity)</option>
                             }
                         </select>
                     </div>
@@ -181,7 +204,79 @@
             }
         }
         
+        // Cấu hình Ô Tìm Kiếm Sản Phẩm (Searchable Dropdown)
+        const searchInput = document.getElementById('productSearchInput');
+        const hiddenSelect = document.getElementById('productSelect');
+        const dropdownList = document.getElementById('productDropdownList');
+        const productItems = document.querySelectorAll('.product-item');
+        const noProductFound = document.getElementById('noProductFound');
+
+        // Hiển thị danh sách khi focus vào ô tìm kiếm
+        searchInput.addEventListener('focus', () => {
+            dropdownList.style.display = 'block';
+        });
+
+        // Ẩn danh sách khi click ra ngoài vùng container
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-select-container')) {
+                dropdownList.style.display = 'none';
+            }
+        });
+
+        // Tìm kiếm sản phẩm khi gõ phím
+        searchInput.addEventListener('input', () => {
+            const query = searchInput.value.toLowerCase().trim();
+            let matches = 0;
+            
+            productItems.forEach(item => {
+                const name = item.dataset.name.toLowerCase();
+                if (name.includes(query)) {
+                    item.style.setProperty('display', 'flex', 'important');
+                    matches++;
+                } else {
+                    item.style.setProperty('display', 'none', 'important');
+                }
+            });
+            
+            if (matches === 0) {
+                noProductFound.style.display = 'block';
+            } else {
+                noProductFound.style.display = 'none';
+            }
+            dropdownList.style.display = 'block';
+        });
+
+        // Xử lý khi click chọn một sản phẩm
+        productItems.forEach(item => {
+            item.addEventListener('click', () => {
+                const id = item.dataset.id;
+                const name = item.dataset.name;
+                const quantity = item.dataset.quantity;
+                
+                searchInput.value = `${name} (Tồn: ${quantity})`;
+                hiddenSelect.value = id;
+                
+                dropdownList.style.display = 'none';
+                
+                // Gọi hàm updateProductInfo của hệ thống để tải biến thể
+                updateProductInfo();
+            });
+        });
+        
+        // Khởi tạo hiển thị nếu có sản phẩm chọn sẵn
+        function initSearchSelect() {
+            if (hiddenSelect.value) {
+                const selectedOption = hiddenSelect.options[hiddenSelect.selectedIndex];
+                if (selectedOption && selectedOption.value) {
+                    searchInput.value = selectedOption.text.trim();
+                }
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
+            // Khởi tạo giá trị cho ô input tìm kiếm dựa trên select ẩn
+            initSearchSelect();
+
             if (document.getElementById('productSelect').value) {
                 updateProductInfo();
             }
